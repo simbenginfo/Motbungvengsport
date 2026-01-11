@@ -1,6 +1,7 @@
 var SPREADSHEET_ID = "1RDnDJ5tMaxpcHdIYTlJOs7AbkZEmUlAGYEXeoxvu5dI";
-// This ID is a fallback. The script will try to use a folder named "Motbung_Player_Images" first.
-var PLAYER_IMAGE_FOLDER_ID = "19twoj_GJL13WFiqX6A_SpS7joDno5p1t"; 
+
+// IMPORTANT: Left empty so the script creates a folder in YOUR Drive named "Motbung_Player_Images" automatically.
+var PLAYER_IMAGE_FOLDER_ID = ""; 
 
 var SHEETS = {
   ADMINS: "Admins",
@@ -15,15 +16,18 @@ var SHEETS = {
 };
 
 /**
- * !!! IMPORTANT !!!
- * RUN THIS FUNCTION ONCE MANUALLY IN THE EDITOR TO AUTHORIZE DRIVE ACCESS.
- * 1. Select 'authorizeScript' from the function dropdown at the top.
+ * !!! CRITICAL STEP !!!
+ * 1. Select 'authorizeScript' from the function dropdown in the Editor.
  * 2. Click 'Run'.
- * 3. Accept the permissions.
+ * 3. Review Permissions -> Choose Account -> Advanced -> Go to ... (unsafe) -> Allow.
+ * 4. AFTER THIS, YOU MUST DEPLOY A "NEW VERSION".
  */
 function authorizeScript() {
-  DriveApp.getRootFolder();
-  console.log("Script is authorized to access Drive.");
+  // We perform a read AND write operation to force Google to ask for full Drive scope.
+  var folder = DriveApp.getRootFolder();
+  var file = folder.createFile("temp_auth_check.txt", "Auth Check");
+  file.setTrashed(true);
+  console.log("Script is fully authorized for Read/Write access to Drive.");
 }
 
 /* --- CORS SUPPORT --- */
@@ -44,7 +48,7 @@ function doGet(e) {
 /* --- MAIN POST HANDLER --- */
 function doPost(e) {
   var lock = LockService.getScriptLock();
-  var hasLock = lock.tryLock(30000); // Increased wait time to 30s for uploads
+  var hasLock = lock.tryLock(30000); 
 
   if (!hasLock) {
     return ContentService.createTextOutput(JSON.stringify({
@@ -471,15 +475,16 @@ function getOrCreateFolder() {
 
 function savePlayerImage(base64Data, playerId) {
   try {
-    // 1. Get Folder: Try hardcoded ID first, then fallback to finding/creating "Motbung_Player_Images"
+    // 1. Get Folder: Try hardcoded ID first, if missing or invalid, create one in User's Drive
     var folder;
     try {
-        if (PLAYER_IMAGE_FOLDER_ID) {
+        if (PLAYER_IMAGE_FOLDER_ID && PLAYER_IMAGE_FOLDER_ID !== "") {
             folder = DriveApp.getFolderById(PLAYER_IMAGE_FOLDER_ID);
         } else {
             throw new Error("No ID");
         }
     } catch(e) {
+        // Fallback: Create folder in the Drive of the account running the script (You)
         folder = getOrCreateFolder();
     }
 
@@ -519,8 +524,8 @@ function savePlayerImage(base64Data, playerId) {
 
   } catch(e) {
     var msg = e.toString();
-    if (msg.includes("permission")) {
-        return "Error: Script needs Authorization. Run authorizeScript() in editor.";
+    if (msg.includes("permission") || msg.includes("authorization")) {
+        return "Error: Script needs Authorization. Run authorizeScript() in editor, then Deploy NEW Version.";
     }
     return "Error Uploading: " + msg;
   }
