@@ -664,7 +664,23 @@ export const AdminPanel: React.FC = () => {
                                 
                                 <div className="space-y-1">
                                     <label className="text-xs text-gray-500">Match Date</label>
-                                    <input type="date" value={editingMatch.date ? new Date(editingMatch.date).toISOString().slice(0, 10) : ''} onChange={e => setEditingMatch({...editingMatch, date: new Date(e.target.value).toISOString()})} className="w-full bg-black border border-neutral-700 text-white p-2 rounded text-sm" required />
+                                    <input 
+                                        type="date" 
+                                        value={(() => {
+                                            try {
+                                                return editingMatch.date ? new Date(editingMatch.date).toISOString().slice(0, 10) : '';
+                                            } catch (e) { return ''; }
+                                        })()}
+                                        onChange={e => {
+                                            if (e.target.value) {
+                                                setEditingMatch({...editingMatch, date: new Date(e.target.value).toISOString()});
+                                            } else {
+                                                setEditingMatch({...editingMatch, date: ''});
+                                            }
+                                        }}
+                                        className="w-full bg-black border border-neutral-700 text-white p-2 rounded text-sm" 
+                                        required 
+                                    />
                                 </div>
 
                                 <div className="space-y-1">
