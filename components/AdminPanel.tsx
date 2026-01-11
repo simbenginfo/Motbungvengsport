@@ -220,10 +220,8 @@ export const AdminPanel: React.FC = () => {
         setTimeout(() => setActionStatus(''), 3000);
         return;
     }
-    // Time isn't strictly required by backend type but good for UX
-    // if (!matchPayload.time) { ... }
 
-    // Logic for NEW Matches (where we need to construct team names and tournament info)
+    // Logic for NEW Matches
     if (!matchPayload.id) {
          const tourn = tournaments.find(t => t.id === matchPayload.tournamentId);
          const teamA = teams.find(t => t.id === matchPayload.teamA?.id);
@@ -654,7 +652,7 @@ export const AdminPanel: React.FC = () => {
                                         value={editingMatch.teamA?.id || ''} 
                                         onChange={e => {
                                              const t = teams.find(team => team.id === e.target.value);
-                                             setEditingMatch({...editingMatch, teamA: {id: e.target.value, name: t?.name || ''}})
+                                             setEditingMatch(prev => prev ? {...prev, teamA: {id: e.target.value, name: t?.name || ''}} : null)
                                         }} 
                                         className="w-full bg-black border border-neutral-700 text-white p-2 rounded text-sm"
                                         disabled={!editingMatch.tournamentId && !editingMatch.id}
@@ -672,7 +670,7 @@ export const AdminPanel: React.FC = () => {
                                         value={editingMatch.teamB?.id || ''} 
                                         onChange={e => {
                                             const t = teams.find(team => team.id === e.target.value);
-                                            setEditingMatch({...editingMatch, teamB: {id: e.target.value, name: t?.name || ''}})
+                                            setEditingMatch(prev => prev ? {...prev, teamB: {id: e.target.value, name: t?.name || ''}} : null)
                                         }} 
                                         className="w-full bg-black border border-neutral-700 text-white p-2 rounded text-sm"
                                         disabled={!editingMatch.tournamentId && !editingMatch.id}
@@ -689,15 +687,22 @@ export const AdminPanel: React.FC = () => {
                                     <input 
                                         type="date" 
                                         value={(() => {
+                                            if (!editingMatch.date) return '';
                                             try {
-                                                return editingMatch.date ? new Date(editingMatch.date).toISOString().slice(0, 10) : '';
+                                                const d = new Date(editingMatch.date);
+                                                if (isNaN(d.getTime())) return '';
+                                                return d.toISOString().slice(0, 10);
                                             } catch (e) { return ''; }
                                         })()}
                                         onChange={e => {
-                                            if (e.target.value) {
-                                                setEditingMatch({...editingMatch, date: new Date(e.target.value).toISOString()});
-                                            } else {
-                                                setEditingMatch({...editingMatch, date: ''});
+                                            const val = e.target.value;
+                                            if (!val) {
+                                                setEditingMatch(prev => prev ? {...prev, date: ''} : null);
+                                                return;
+                                            }
+                                            const d = new Date(val);
+                                            if (!isNaN(d.getTime())) {
+                                                setEditingMatch(prev => prev ? {...prev, date: d.toISOString()} : null);
                                             }
                                         }}
                                         className="w-full bg-black border border-neutral-700 text-white p-2 rounded text-sm" 
@@ -729,11 +734,11 @@ export const AdminPanel: React.FC = () => {
                                     <div className="md:col-span-2 grid grid-cols-2 gap-4 mt-2 bg-neutral-800/50 p-2 rounded">
                                         <div>
                                              <label className="text-xs text-gray-500">{editingMatch.teamA?.name || 'Home'} Score</label>
-                                             <input type="number" value={editingMatch.teamA?.score ?? ''} onChange={e => setEditingMatch({...editingMatch, teamA: {...editingMatch.teamA!, score: Number(e.target.value)}})} className="w-full bg-black border border-neutral-700 text-white p-2 rounded text-sm" />
+                                             <input type="number" value={editingMatch.teamA?.score ?? ''} onChange={e => setEditingMatch(prev => prev ? {...prev, teamA: {...prev.teamA!, score: Number(e.target.value)}} : null)} className="w-full bg-black border border-neutral-700 text-white p-2 rounded text-sm" />
                                         </div>
                                         <div>
                                              <label className="text-xs text-gray-500">{editingMatch.teamB?.name || 'Away'} Score</label>
-                                             <input type="number" value={editingMatch.teamB?.score ?? ''} onChange={e => setEditingMatch({...editingMatch, teamB: {...editingMatch.teamB!, score: Number(e.target.value)}})} className="w-full bg-black border border-neutral-700 text-white p-2 rounded text-sm" />
+                                             <input type="number" value={editingMatch.teamB?.score ?? ''} onChange={e => setEditingMatch(prev => prev ? {...prev, teamB: {...prev.teamB!, score: Number(e.target.value)}} : null)} className="w-full bg-black border border-neutral-700 text-white p-2 rounded text-sm" />
                                         </div>
                                     </div>
                                 )}
@@ -786,9 +791,7 @@ export const AdminPanel: React.FC = () => {
                 </div>
             )}
             
-            {/* ... other tabs ... */}
-            
-            {/* PLAYERS */}
+            {/* PLAYERS - Same as before */}
             {activeTab === 'PLAYERS' && (
                 <div>
                     <div className="flex justify-between items-center mb-6">
