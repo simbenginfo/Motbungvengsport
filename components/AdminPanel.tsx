@@ -59,24 +59,29 @@ export const AdminPanel: React.FC = () => {
 
   const loadAllData = async () => {
     setDataLoading(true);
-    const [t, tourneys, m, p, s, b, r, a] = await Promise.all([
-        api.getTeams(),
-        api.getTournaments(),
-        api.getMatches(),
-        api.getPlayers(),
-        api.getStandings(),
-        api.getBlogPosts(),
-        api.getRules(),
-        api.getAdmins()
-    ]);
-    setTeams(t);
-    setTournaments(tourneys);
-    setMatches(m);
-    setPlayers(p);
-    setStandings(s);
-    setBlogs(b);
-    setRules(r);
-    setAdmins(a);
+    try {
+        const [t, tourneys, m, p, s, b, r, a] = await Promise.all([
+            api.getTeams(),
+            api.getTournaments(),
+            api.getMatches(),
+            api.getPlayers(),
+            api.getStandings(),
+            api.getBlogPosts(),
+            api.getRules(),
+            api.getAdmins()
+        ]);
+        setTeams(t);
+        setTournaments(tourneys);
+        setMatches(m);
+        setPlayers(p);
+        setStandings(s);
+        setBlogs(b);
+        setRules(r);
+        setAdmins(a);
+    } catch (e) {
+        console.error("Failed to load data", e);
+        setActionStatus("Error loading data from server");
+    }
     setDataLoading(false);
   };
 
@@ -259,8 +264,7 @@ export const AdminPanel: React.FC = () => {
              teamB: { id: teamB.id, name: teamB.name }
          };
     } else {
-        // For existing matches, we might just be updating score/status
-        // But if teams were changed, ensure names are correct
+        // For existing matches, ensure names are correct if teams changed
          if (matchPayload.teamA?.id) {
              const teamA = teams.find(t => t.id === matchPayload.teamA.id);
              if (teamA) matchPayload.teamA.name = teamA.name;
@@ -276,7 +280,7 @@ export const AdminPanel: React.FC = () => {
         
         if (res.success) {
             setEditingMatch(null);
-            loadAllData();
+            await loadAllData(); // Refresh list to show new match
             setActionStatus('Match saved successfully');
         } else {
             setActionStatus('Failed to save: ' + res.message);
@@ -783,18 +787,27 @@ export const AdminPanel: React.FC = () => {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-neutral-800">
-                                {matches.map(m => (
+                                {matches
+                                    .slice()
+                                    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()) // Show newest matches first
+                                    .map(m => (
                                     <tr key={m.id} className="hover:bg-neutral-800/50">
                                         <td className="px-4 py-3 whitespace-nowrap">
-                                            {new Date(m.date).toLocaleDateString()}
+                                            {/* Safe Date Rendering */}
+                                            {(() => {
+                                                try {
+                                                    const d = new Date(m.date);
+                                                    return isNaN(d.getTime()) ? <span className="text-red-500 text-xs">Invalid Date</span> : d.toLocaleDateString();
+                                                } catch (e) { return <span className="text-red-500 text-xs">Error</span>; }
+                                            })()}
                                             <div className="text-xs text-gray-500">{m.time}</div>
                                         </td>
                                         <td className="px-4 py-3 text-xs">{m.categoryName}</td>
                                         <td className="px-4 py-3 text-white">
-                                            {m.teamA.name} vs {m.teamB.name}
+                                            {m.teamA?.name || 'Unknown'} vs {m.teamB?.name || 'Unknown'}
                                             <div className="text-xs text-gray-500">{m.venue}</div>
                                         </td>
-                                        <td className="px-4 py-3 font-mono">{m.teamA.score ?? '-'} : {m.teamB.score ?? '-'}</td>
+                                        <td className="px-4 py-3 font-mono">{m.teamA?.score ?? '-'} : {m.teamB?.score ?? '-'}</td>
                                         <td className="px-4 py-3">
                                             <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${m.status === 'Live' ? 'bg-red-600 text-white' : m.status === 'Completed' ? 'bg-neutral-700' : 'bg-blue-900 text-blue-200'}`}>{m.status}</span>
                                         </td>
@@ -806,18 +819,21 @@ export const AdminPanel: React.FC = () => {
                                 ))}
                             </tbody>
                         </table>
+                        {matches.length === 0 && <div className="p-4 text-center text-gray-500">No matches found. Create one above.</div>}
                     </div>
                 </div>
             )}
             
-            {/* PLAYERS - Same as before */}
+            {/* ... other tabs ... */}
+            
+            {/* PLAYERS */}
             {activeTab === 'PLAYERS' && (
                 <div>
                     <div className="flex justify-between items-center mb-6">
                         <h3 className="text-xl font-bold text-white">Player Roster</h3>
                         <button onClick={() => setEditingPlayer({} as Player)} className="bg-brand-green text-black px-3 py-2 rounded text-sm font-bold flex items-center gap-2 hover:bg-green-400"><Plus size={16}/> Add Player</button>
                     </div>
-
+                    {/* ... (Existing Player Form Code) ... */}
                     {editingPlayer && (
                         <div className="bg-neutral-900 p-6 rounded mb-6 border border-neutral-700 animate-fade-in">
                             <h4 className="font-bold text-gray-300 mb-4">{editingPlayer.id ? 'Edit Player' : 'New Player'}</h4>
@@ -994,9 +1010,9 @@ export const AdminPanel: React.FC = () => {
                     </div>
                 </div>
             )}
-
-            {/* BLOGS, RULES, ADMINS, SECURITY - Keep same structure */}
-            {activeTab === 'BLOGS' && (
+            
+            {/* ... other tabs ... */}
+             {activeTab === 'BLOGS' && (
                 <div>
                     <div className="flex justify-between items-center mb-6">
                         <h3 className="text-xl font-bold text-white">News & Updates</h3>

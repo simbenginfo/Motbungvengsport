@@ -241,6 +241,12 @@ function createMatch(data) {
   if (!isAdminLoggedIn()) return { success: false, message: "Unauthorized" };
   if (!data.teamAId || !data.teamBId || !data.matchDate) return { success: false, message: "Missing required fields" };
 
+  // Validate Date Object before saving to prevent corruption
+  var d = new Date(data.matchDate);
+  if (isNaN(d.getTime())) {
+    return { success: false, message: "Invalid Date Format" };
+  }
+
   var sheet = getSheet(SHEETS.MATCHES);
   var adminEmail = PropertiesService.getUserProperties().getProperty("loggedInAdmin");
   var matchId = "match_" + Date.now();
@@ -257,7 +263,7 @@ function createMatch(data) {
     data.teamAName,
     data.teamBId,
     data.teamBName,
-    new Date(data.matchDate),
+    d, // Safe Date Object
     data.matchTime || "",
     data.venue || "",
     "", // teamAScore
@@ -275,22 +281,25 @@ function getMatches(filters) {
   var rows = sheet.getDataRange().getValues();
   var matches = [];
 
-  // Start at i=1 to skip header
+  // Guard against empty or header-only sheet
+  if (rows.length < 2) return { success: true, matches: [] };
+
   for (var i = 1; i < rows.length; i++) {
-    // Optional filtering logic if needed in future
+    var row = rows[i];
+    // Ensure we don't crash if columns are missing
     matches.push({
-        matchId: rows[i][0],
-        tournamentId: rows[i][1],
-        tournamentName: rows[i][2],
-        sport: rows[i][3],
-        categoryId: rows[i][4],
-        categoryName: rows[i][5],
-        teamA: { id: rows[i][6], name: rows[i][7], score: rows[i][13] },
-        teamB: { id: rows[i][8], name: rows[i][9], score: rows[i][14] },
-        matchDate: rows[i][10],
-        matchTime: rows[i][11],
-        venue: rows[i][12],
-        status: rows[i][15]
+        matchId: row[0],
+        tournamentId: row[1],
+        tournamentName: row[2],
+        sport: row[3],
+        categoryId: row[4],
+        categoryName: row[5],
+        teamA: { id: row[6] || "", name: row[7] || "Unknown", score: row[13] },
+        teamB: { id: row[8] || "", name: row[9] || "Unknown", score: row[14] },
+        matchDate: row[10] || "", // Ensure not undefined
+        matchTime: row[11],
+        venue: row[12],
+        status: row[15] || "Upcoming"
     });
   }
   return { success: true, matches: matches };
@@ -305,7 +314,10 @@ function updateMatch(data) {
   for (var i = 1; i < rows.length; i++) {
     if (rows[i][0] === data.matchId) {
       // Update fields based on what's passed
-      if (data.matchDate) sheet.getRange(i + 1, 11).setValue(new Date(data.matchDate));
+      if (data.matchDate) {
+         var d = new Date(data.matchDate);
+         if (!isNaN(d.getTime())) sheet.getRange(i + 1, 11).setValue(d);
+      }
       if (data.matchTime) sheet.getRange(i + 1, 12).setValue(data.matchTime);
       if (data.venue) sheet.getRange(i + 1, 13).setValue(data.venue);
 

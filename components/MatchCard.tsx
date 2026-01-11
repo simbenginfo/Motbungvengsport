@@ -12,10 +12,23 @@ export const MatchCard: React.FC<MatchCardProps> = ({ match }) => {
   const isFinished = match.status === 'Completed';
   const isLive = match.status === 'Live';
 
-  const dateObj = new Date(match.date);
-  const formattedDate = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  // If time is provided in the match object separately, use it, otherwise fallback to date object time
-  const formattedTime = match.time || dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  // Robust Date Handling
+  let formattedDate = 'TBA';
+  let formattedTime = match.time || '';
+  
+  if (match.date) {
+    try {
+        const dateObj = new Date(match.date);
+        if (!isNaN(dateObj.getTime())) {
+             formattedDate = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+             if (!formattedTime) {
+                 formattedTime = dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+             }
+        }
+    } catch (e) {
+        // Fallback to TBA
+    }
+  }
 
   return (
     <div className="bg-brand-gray border border-neutral-800 rounded-lg p-5 hover:border-brand-red/50 transition-all duration-300 group relative overflow-hidden">
@@ -34,16 +47,16 @@ export const MatchCard: React.FC<MatchCardProps> = ({ match }) => {
         {/* Home Team */}
         <div className="flex flex-col items-center flex-1">
           <div className="w-12 h-12 rounded-full bg-neutral-700 flex items-center justify-center mb-2 border border-neutral-600">
-             <span className="text-xl font-display font-bold text-white">{match.teamA.name?.substring(0, 1) || '?'}</span>
+             <span className="text-xl font-display font-bold text-white">{match.teamA?.name?.substring(0, 1) || '?'}</span>
           </div>
-          <span className="text-center font-semibold text-sm leading-tight">{match.teamA.name || 'Unknown'}</span>
+          <span className="text-center font-semibold text-sm leading-tight">{match.teamA?.name || 'Unknown'}</span>
         </div>
 
         {/* Score/VS */}
         <div className="px-4 text-center">
           {isFinished || isLive ? (
             <div className="text-3xl font-display font-bold text-white tracking-widest">
-              {match.teamA.score || 0} - {match.teamB.score || 0}
+              {match.teamA?.score || 0} - {match.teamB?.score || 0}
             </div>
           ) : (
             <div className="text-2xl font-display font-bold text-neutral-500">VS</div>
@@ -53,9 +66,9 @@ export const MatchCard: React.FC<MatchCardProps> = ({ match }) => {
         {/* Away Team */}
         <div className="flex flex-col items-center flex-1">
           <div className="w-12 h-12 rounded-full bg-neutral-700 flex items-center justify-center mb-2 border border-neutral-600">
-             <span className="text-xl font-display font-bold text-white">{match.teamB.name?.substring(0, 1) || '?'}</span>
+             <span className="text-xl font-display font-bold text-white">{match.teamB?.name?.substring(0, 1) || '?'}</span>
           </div>
-          <span className="text-center font-semibold text-sm leading-tight">{match.teamB.name || 'Unknown'}</span>
+          <span className="text-center font-semibold text-sm leading-tight">{match.teamB?.name || 'Unknown'}</span>
         </div>
       </div>
 
@@ -65,10 +78,12 @@ export const MatchCard: React.FC<MatchCardProps> = ({ match }) => {
                 <Calendar size={14} />
                 <span>{formattedDate}</span>
             </div>
-            <div className="flex items-center gap-1.5">
-                <Clock size={14} />
-                <span>{formattedTime}</span>
-            </div>
+            {formattedTime && (
+                <div className="flex items-center gap-1.5">
+                    <Clock size={14} />
+                    <span>{formattedTime}</span>
+                </div>
+            )}
         </div>
         <div className="flex items-center gap-1.5">
             <MapPin size={14} />
