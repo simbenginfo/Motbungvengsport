@@ -2,7 +2,7 @@ import { Match, Player, Team, Standing, BlogPost, Admin, Tournament, TeamCategor
 import { INITIAL_MATCHES, INITIAL_PLAYERS, INITIAL_TEAMS, INITIAL_STANDINGS, INITIAL_BLOGS, FOOTBALL_RULES, VOLLEYBALL_RULES } from "../constants";
 
 // IMPORTANT: This must be the 'Web App URL' with 'Who has access' set to 'Anyone'
-const GAS_API_URL = 'https://script.google.com/macros/s/AKfycby_fwxm0S_r9si5OHBoSGzQ7Gq6UlfwKKJFx1Yk0pHOIdkDqU0aiY1VF30PXqo47FHW/exec'; 
+const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbyVbnH5E8pPgBQYwyLuLyARndSUnouSdSc69Fxl3QlYTuTTfFaxZlEynkASYKCWgyZo/exec'; 
 
 interface AuthResponse {
   success: boolean;
