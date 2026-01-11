@@ -2,7 +2,7 @@ import { Match, Player, Team, Standing, BlogPost, Admin, Tournament, TeamCategor
 import { INITIAL_MATCHES, INITIAL_PLAYERS, INITIAL_TEAMS, INITIAL_STANDINGS, INITIAL_BLOGS, FOOTBALL_RULES, VOLLEYBALL_RULES } from "../constants";
 
 // IMPORTANT: This must be the 'Web App URL' with 'Who has access' set to 'Anyone'
-const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbwlRJkT7L90xaHd86MLSylEHobWeA-j4cSP3o--o0Scbyf592u3ISo7P5_RsLNlWxa9/exec'; 
+const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbwMFWvVHXVFOtD_ZuLeO_YRBSSGYwKLkjhiqU3bdXFa_H9HfTB8d2yQ3zoAKTbnRqcV/exec'; 
 
 interface AuthResponse {
   success: boolean;
@@ -26,9 +26,11 @@ const postToBackend = async <T>(payload: any, retries = 2): Promise<T> => {
   try {
     const response = await fetch(GAS_API_URL, {
       method: 'POST',
-      redirect: 'follow', // Explicitly follow GAS 302 redirects
-      // 'text/plain' is crucial for GAS to process the body without triggering a strict CORS preflight (OPTIONS)
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      redirect: 'follow', 
+      credentials: 'omit', 
+      // Using simple text/plain ensures that modern browsers skip the preflight OPTIONS request for simple POSTs
+      // This is crucial because GAS Web Apps can be finicky with CORS preflights
+      headers: { 'Content-Type': 'text/plain' },
       body: JSON.stringify(payload)
     });
     
@@ -36,8 +38,14 @@ const postToBackend = async <T>(payload: any, retries = 2): Promise<T> => {
        throw new Error(`HTTP Error: ${response.status}`);
     }
     
-    const data = await response.json();
-    return data as T;
+    const text = await response.text();
+    try {
+        const data = JSON.parse(text);
+        return data as T;
+    } catch (e) {
+        console.error("Failed to parse backend response:", text);
+        throw new Error("Backend returned non-JSON response. Check Script Logs.");
+    }
   } catch (error) {
     if (retries > 0) {
         console.warn(`Retrying action ${payload.action}... (${retries} attempts left)`);

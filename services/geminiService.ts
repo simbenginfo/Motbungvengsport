@@ -5,8 +5,7 @@ let aiClient: GoogleGenAI | null = null;
 const getAiClient = () => {
   if (!aiClient) {
     // In a real app, strict error handling for missing key
-    const apiKey = process.env.API_KEY || ''; 
-    aiClient = new GoogleGenAI({ apiKey });
+    aiClient = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
   }
   return aiClient;
 };
