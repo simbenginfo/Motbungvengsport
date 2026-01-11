@@ -208,7 +208,7 @@ export const AdminPanel: React.FC = () => {
   
   const handleSaveMatch = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingMatch) return;
+    if (!editingMatch || loading) return;
     setLoading(true);
 
     let matchPayload = {...editingMatch} as Match;
@@ -224,6 +224,7 @@ export const AdminPanel: React.FC = () => {
     // Logic for NEW Matches
     if (!matchPayload.id) {
          const tourn = tournaments.find(t => t.id === matchPayload.tournamentId);
+         // Explicitly look up teams to ensure names are populated correctly
          const teamA = teams.find(t => t.id === matchPayload.teamA?.id);
          const teamB = teams.find(t => t.id === matchPayload.teamB?.id);
          
@@ -257,17 +258,34 @@ export const AdminPanel: React.FC = () => {
              teamA: { id: teamA.id, name: teamA.name },
              teamB: { id: teamB.id, name: teamB.name }
          };
+    } else {
+        // For existing matches, we might just be updating score/status
+        // But if teams were changed, ensure names are correct
+         if (matchPayload.teamA?.id) {
+             const teamA = teams.find(t => t.id === matchPayload.teamA.id);
+             if (teamA) matchPayload.teamA.name = teamA.name;
+         }
+         if (matchPayload.teamB?.id) {
+             const teamB = teams.find(t => t.id === matchPayload.teamB.id);
+             if (teamB) matchPayload.teamB.name = teamB.name;
+         }
     }
 
-    const res = await api.upsertMatch(matchPayload);
-    
-    if (res.success) {
-        setEditingMatch(null);
-        loadAllData();
-        setActionStatus('Match saved successfully');
-    } else {
-        setActionStatus('Failed to save: ' + res.message);
+    try {
+        const res = await api.upsertMatch(matchPayload);
+        
+        if (res.success) {
+            setEditingMatch(null);
+            loadAllData();
+            setActionStatus('Match saved successfully');
+        } else {
+            setActionStatus('Failed to save: ' + res.message);
+        }
+    } catch (err: any) {
+        console.error("Match save error", err);
+        setActionStatus('Network error: ' + (err.message || 'Unknown error'));
     }
+    
     setLoading(false);
     setTimeout(() => setActionStatus(''), 4000);
   };
@@ -629,12 +647,12 @@ export const AdminPanel: React.FC = () => {
                                         <select 
                                             value={editingMatch.tournamentId || ''} 
                                             onChange={e => {
-                                                setEditingMatch({
-                                                    ...editingMatch, 
+                                                setEditingMatch(prev => ({
+                                                    ...(prev || {}), 
                                                     tournamentId: e.target.value,
                                                     teamA: {id: '', name: ''}, // Reset teams on tourn change
                                                     teamB: {id: '', name: ''}
-                                                });
+                                                }));
                                             }} 
                                             className="w-full bg-black border border-neutral-700 text-white p-2 rounded text-sm"
                                             required
@@ -695,6 +713,7 @@ export const AdminPanel: React.FC = () => {
                                             } catch (e) { return ''; }
                                         })()}
                                         onChange={e => {
+                                            // Robust date handling: verify the date is valid before conversion
                                             const val = e.target.value;
                                             if (!val) {
                                                 setEditingMatch(prev => prev ? {...prev, date: ''} : null);
