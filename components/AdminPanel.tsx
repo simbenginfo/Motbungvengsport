@@ -118,6 +118,24 @@ export const AdminPanel: React.FC = () => {
     };
     reader.readAsDataURL(file);
   };
+  
+  const to12HourTime = (timeStr: string | undefined) => {
+      if (!timeStr) return '';
+      // If it already contains AM/PM, assume it's pre-formatted and return properly
+      if (timeStr.toUpperCase().includes('M')) return timeStr;
+
+      try {
+          const [h, m] = timeStr.split(':');
+          const hour = parseInt(h, 10);
+          if (isNaN(hour)) return timeStr;
+          
+          const ampm = hour >= 12 ? 'PM' : 'AM';
+          const hour12 = hour % 12 || 12;
+          return `${hour12}:${m} ${ampm}`;
+      } catch (e) {
+          return timeStr;
+      }
+  };
 
   // --- AUTH HANDLERS ---
   const handleLogin = async (e: React.FormEvent) => {
@@ -793,14 +811,18 @@ export const AdminPanel: React.FC = () => {
                                     .map(m => (
                                     <tr key={m.id} className="hover:bg-neutral-800/50">
                                         <td className="px-4 py-3 whitespace-nowrap">
-                                            {/* Safe Date Rendering */}
+                                            {/* Safe Date Rendering in DD-MM-YYYY format */}
                                             {(() => {
                                                 try {
                                                     const d = new Date(m.date);
-                                                    return isNaN(d.getTime()) ? <span className="text-red-500 text-xs">Invalid Date</span> : d.toLocaleDateString();
+                                                    if (isNaN(d.getTime())) return <span className="text-red-500 text-xs">Invalid Date</span>;
+                                                    const day = String(d.getDate()).padStart(2, '0');
+                                                    const month = String(d.getMonth() + 1).padStart(2, '0');
+                                                    const year = d.getFullYear();
+                                                    return <span>{`${day}-${month}-${year}`}</span>;
                                                 } catch (e) { return <span className="text-red-500 text-xs">Error</span>; }
                                             })()}
-                                            <div className="text-xs text-gray-500">{m.time}</div>
+                                            <div className="text-xs text-gray-500">{to12HourTime(m.time)}</div>
                                         </td>
                                         <td className="px-4 py-3 text-xs">{m.categoryName}</td>
                                         <td className="px-4 py-3 text-white">
