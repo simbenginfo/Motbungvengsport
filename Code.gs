@@ -71,7 +71,7 @@ function doPost(e) {
       case "createTeam": result = createTeam(data); break;
       case "deleteTeam": result = deleteTeam(data.teamId); break;
 
-      // MATCHES (New Logic)
+      // MATCHES
       case "createMatch": result = createMatch(data); break;
       case "getMatches": result = getMatches(data); break;
       case "updateMatch": result = updateMatch(data); break;
@@ -236,12 +236,11 @@ function deleteTeam(id) {
   return deleteRowById(SHEETS.TEAMS, id);
 }
 
-/* --- MATCHES (NEW) --- */
+/* --- MATCHES --- */
 function createMatch(data) {
   if (!isAdminLoggedIn()) return { success: false, message: "Unauthorized" };
   if (!data.teamAId || !data.teamBId || !data.matchDate) return { success: false, message: "Missing required fields" };
 
-  // Validate Date Object before saving to prevent corruption
   var d = new Date(data.matchDate);
   if (isNaN(d.getTime())) {
     return { success: false, message: "Invalid Date Format" };
@@ -251,7 +250,6 @@ function createMatch(data) {
   var adminEmail = PropertiesService.getUserProperties().getProperty("loggedInAdmin");
   var matchId = "match_" + Date.now();
 
-  // Columns: matchId, tournId, tournName, sport, catId, catName, teamAId, teamAName, teamBId, teamBName, matchDate, matchTime, venue, scoreA, scoreB, status, createdBy, createdAt
   sheet.appendRow([
     matchId,
     data.tournamentId,
@@ -263,11 +261,11 @@ function createMatch(data) {
     data.teamAName,
     data.teamBId,
     data.teamBName,
-    d, // Safe Date Object
+    d,
     data.matchTime || "",
     data.venue || "",
-    "", // teamAScore
-    "", // teamBScore
+    "",
+    "",
     "Upcoming",
     adminEmail,
     new Date()
@@ -278,26 +276,53 @@ function createMatch(data) {
 
 function getMatches(filters) {
   var sheet = getSheet(SHEETS.MATCHES);
-  var rows = sheet.getDataRange().getValues();
+  
+  // Get RAW values (for dates as objects if needed, and technical IDs)
+  var rawData = sheet.getDataRange().getValues();
+  // Get DISPLAY values (to trust exact user formatting for Time)
+  var displayData = sheet.getDataRange().getDisplayValues();
+
   var matches = [];
 
-  // Guard against empty or header-only sheet
-  if (rows.length < 2) return { success: true, matches: [] };
+  if (rawData.length < 2) return { success: true, matches: [] };
 
-  for (var i = 1; i < rows.length; i++) {
-    var row = rows[i];
-    // Ensure we don't crash if columns are missing
+  for (var i = 1; i < rawData.length; i++) {
+    var row = rawData[i];
+    var dispRow = displayData[i];
+    
+    // Manual Data Entry Fix: Generate fallback ID if missing so it displays in App
+    var mId = row[0];
+    if (!mId) mId = "manual_row_" + (i + 1);
+
+    // Loosen validation: If we have Team Names or a Date, show the match
+    // Col indices: 7=TeamAName, 9=TeamBName, 10=MatchDate
+    if (!row[7] && !row[9] && !row[10]) continue;
+
+    // Time Fix: Use DISPLAY value (dispRow[11]) to match Sheet visual exactly.
+    // This bypasses timezone shifts that happen when parsing Date objects in script.
+    var timeStr = dispRow[11];
+    if (!timeStr) timeStr = ""; 
+
+    // Date Fix: Use raw object if available for valid ISO, otherwise fallback to string
+    var dateVal = row[10];
+    var dateStr = "";
+    if (dateVal instanceof Date) {
+        dateStr = dateVal.toISOString();
+    } else {
+        dateStr = String(dateVal || "");
+    }
+
     matches.push({
-        matchId: row[0],
-        tournamentId: row[1],
-        tournamentName: row[2],
-        sport: row[3],
-        categoryId: row[4],
-        categoryName: row[5],
+        matchId: mId,
+        tournamentId: row[1] || "",
+        tournamentName: row[2] || "",
+        sport: row[3] || "",
+        categoryId: row[4] || "",
+        categoryName: row[5] || "",
         teamA: { id: row[6] || "", name: row[7] || "Unknown", score: row[13] },
         teamB: { id: row[8] || "", name: row[9] || "Unknown", score: row[14] },
-        matchDate: row[10] || "", // Ensure not undefined
-        matchTime: row[11],
+        matchDate: dateStr, 
+        matchTime: timeStr, 
         venue: row[12],
         status: row[15] || "Upcoming"
     });
@@ -313,12 +338,12 @@ function updateMatch(data) {
 
   for (var i = 1; i < rows.length; i++) {
     if (rows[i][0] === data.matchId) {
-      // Update fields based on what's passed
       if (data.matchDate) {
          var d = new Date(data.matchDate);
          if (!isNaN(d.getTime())) sheet.getRange(i + 1, 11).setValue(d);
       }
-      if (data.matchTime) sheet.getRange(i + 1, 12).setValue(data.matchTime);
+      // Update time as text to prevent auto-formatting weirdness
+      if (data.matchTime) sheet.getRange(i + 1, 12).setNumberFormat("@").setValue(data.matchTime);
       if (data.venue) sheet.getRange(i + 1, 13).setValue(data.venue);
 
       if (data.teamAScore !== undefined) sheet.getRange(i + 1, 14).setValue(data.teamAScore);
