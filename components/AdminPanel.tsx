@@ -270,6 +270,9 @@ export const AdminPanel: React.FC = () => {
         loadAllData();
         setActionStatus('Player saved successfully');
     } else {
+        if (res.message && res.message.includes('Authorization')) {
+            alert("BACKEND PERMISSION ERROR:\n\nThe Google Apps Script needs to be authorized to use Google Drive for image uploads.\n\n1. Open your Google Script Editor.\n2. Select 'authorizeScript' from the dropdown.\n3. Click Run and accept permissions.");
+        }
         setActionStatus('Failed: ' + (res.message || 'Error'));
     }
     setLoading(false);
@@ -944,33 +947,4 @@ export const AdminPanel: React.FC = () => {
                        <h3 className="text-lg font-bold text-brand-green mb-4">Add Admin</h3>
                        <form onSubmit={handleCreateAdmin} className="space-y-4">
                           <input type="text" value={newAdminName} onChange={e => setNewAdminName(e.target.value)} required className="w-full bg-black border border-neutral-700 rounded p-2 text-sm text-white" placeholder="Name"/>
-                          <input type="email" value={newAdminEmail} onChange={e => setNewAdminEmail(e.target.value)} required className="w-full bg-black border border-neutral-700 rounded p-2 text-sm text-white" placeholder="Email"/>
-                          <input type="password" value={newAdminPassword} onChange={e => setNewAdminPassword(e.target.value)} required className="w-full bg-black border border-neutral-700 rounded p-2 text-sm text-white" placeholder="Password"/>
-                          <button type="submit" disabled={loading} className="w-full bg-brand-green text-black font-bold py-2 rounded hover:bg-green-400 transition">Create</button>
-                       </form>
-                    </div>
-                 </div>
-            )}
-
-            {/* SECURITY */}
-            {activeTab === 'SECURITY' && (
-                 <div className="max-w-md mx-auto">
-                   <h3 className="text-xl font-bold text-white mb-6 text-center">Change Password</h3>
-                   <form onSubmit={handleChangePassword} className="space-y-4">
-                      <input type="password" value={oldPassword} onChange={(e) => setOldPassword(e.target.value)} className="w-full bg-black border border-neutral-700 rounded p-3 text-white" placeholder="Current Password" required/>
-                      <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="w-full bg-black border border-neutral-700 rounded p-3 text-white" placeholder="New Password" required/>
-                      <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="w-full bg-black border border-neutral-700 rounded p-3 text-white" placeholder="Confirm New Password" required/>
-                      <button type="submit" disabled={loading} className="w-full bg-white text-black py-3 rounded font-bold hover:bg-gray-200 transition mt-6">Update Password</button>
-                   </form>
-                 </div>
-            )}
-        </div>
-        
-        {actionStatus && (
-            <div className="fixed bottom-8 right-8 bg-brand-green text-black px-6 py-3 rounded shadow-lg font-bold animate-fade-in z-50">
-                {actionStatus}
-            </div>
-        )}
-    </div>
-  );
-};
+                          <input type="email" value={newAdminEmail} onChange={e => setNewAdminEmail(e.target.value)} required className="w-full bg-black border border-neutral-700

@@ -376,6 +376,10 @@ function createPlayer(data) {
   var photoUrl = "";
   if (data.imageBase64 && data.imageBase64.length > 100) {
     photoUrl = savePlayerImage(data.imageBase64, playerId);
+    // CRITICAL: Check for error immediately
+    if (photoUrl.indexOf("Error") === 0) {
+        return { success: false, message: photoUrl };
+    }
   } else {
     // If no base64, check if an existing URL was passed (rare for create, but good for safety)
     photoUrl = (data.photoUrl && data.photoUrl.startsWith("http")) ? data.photoUrl : "";
@@ -437,6 +441,10 @@ function updatePlayer(data) {
 
       if (data.imageBase64 && data.imageBase64.length > 100) {
         var newPhoto = savePlayerImage(data.imageBase64, data.playerId);
+        // CRITICAL: Check for error immediately
+        if (newPhoto.indexOf("Error") === 0) {
+            return { success: false, message: newPhoto };
+        }
         // photoUrl is at index 10, so column 11
         sheet.getRange(i + 1, 11).setValue(newPhoto);
       }
