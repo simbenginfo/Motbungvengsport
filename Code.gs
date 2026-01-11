@@ -466,16 +466,27 @@ function deletePlayer(playerId) {
 function getOrCreateFolder() {
     var folderName = "Motbung_Player_Images";
     var folders = DriveApp.getFoldersByName(folderName);
+    var folder;
     if (folders.hasNext()) {
-        return folders.next();
+        folder = folders.next();
     } else {
-        return DriveApp.createFolder(folderName);
+        folder = DriveApp.createFolder(folderName);
     }
+    
+    // Ensure folder is public so files inside inherit this visibility
+    try {
+        folder.setSharing(DriveApp.Access.ANYONE, DriveApp.Permission.VIEW);
+    } catch(e) {
+        try {
+            folder.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+        } catch(e2) {}
+    }
+    return folder;
 }
 
 function savePlayerImage(base64Data, playerId) {
   try {
-    // 1. Get Folder: Try hardcoded ID first, if missing or invalid, create one in User's Drive
+    // 1. Get Folder
     var folder;
     try {
         if (PLAYER_IMAGE_FOLDER_ID && PLAYER_IMAGE_FOLDER_ID !== "") {
@@ -519,7 +530,8 @@ function savePlayerImage(base64Data, playerId) {
     }
     
     // 5. Return URL
-    // Use the download/view URL format that works best for <img> tags
+    // https://drive.google.com/uc?export=view&id=FILE_ID is the most standard direct link.
+    // 'thumbnail' links can sometimes be flaky if not logged in.
     return "https://drive.google.com/uc?export=view&id=" + file.getId();
 
   } catch(e) {

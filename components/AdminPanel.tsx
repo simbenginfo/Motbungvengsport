@@ -679,7 +679,7 @@ export const AdminPanel: React.FC = () => {
                                     <div className="flex gap-2 items-center bg-black border border-neutral-700 rounded p-2">
                                         {editingPlayer.image && editingPlayer.image.startsWith('data:') ? (
                                             <div className="relative group">
-                                                <img src={editingPlayer.image} alt="Preview" className="h-10 w-10 object-cover rounded border border-neutral-700" />
+                                                <img src={editingPlayer.image} alt="Preview" className="h-10 w-10 object-cover rounded border border-neutral-700" referrerPolicy="no-referrer" />
                                             </div>
                                         ) : editingPlayer.image ? (
                                             editingPlayer.image.startsWith('Error') ? 
@@ -744,7 +744,7 @@ export const AdminPanel: React.FC = () => {
                                     <tr key={p.id} className="hover:bg-neutral-800/50">
                                         <td className="px-4 py-3 font-bold text-white flex items-center gap-2">
                                             {p.image && !p.image.startsWith('Error') ? 
-                                                <img src={p.image} className="w-6 h-6 rounded-full object-cover" /> 
+                                                <img src={p.image} className="w-6 h-6 rounded-full object-cover" referrerPolicy="no-referrer" /> 
                                                 : <div className="w-6 h-6 rounded-full bg-neutral-700 flex items-center justify-center text-xs text-gray-500"><User size={12}/></div>}
                                             {p.name}
                                             {p.image && p.image.startsWith('Error') && <span className="text-[10px] text-red-500 ml-2 border border-red-500/50 px-1 rounded">Error</span>}
