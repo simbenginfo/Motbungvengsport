@@ -413,16 +413,6 @@ export const AdminPanel: React.FC = () => {
                     </button>
                 </form>
                 {loginStatus && <p className="mt-4 text-xs text-brand-green text-center">{loginStatus}</p>}
-
-                {/* Default Credentials Hint */}
-                <div className="mt-6 p-4 bg-neutral-900/50 rounded border border-neutral-800 text-xs text-gray-500">
-                    <p className="font-bold text-gray-400 mb-2 uppercase tracking-wide">First Time Setup?</p>
-                    <p className="mb-1">If your database is empty, the system will create a default admin for you on your first login attempt.</p>
-                    <div className="mt-2 pl-2 border-l-2 border-brand-green">
-                        <p>Email: <span className="text-brand-green font-mono">admin@motbung.com</span></p>
-                        <p>Password: <span className="text-brand-green font-mono">admin123</span></p>
-                    </div>
-                </div>
             </div>
         </div>
     );
