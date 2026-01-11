@@ -13,12 +13,14 @@ var SHEETS = {
   RULES: "Rules"
 };
 
+/* --- CORS SUPPORT --- */
 function doOptions(e) {
-  // Handle CORS preflight requests for environments that enforce it strictly
   return ContentService.createTextOutput("")
-    .setMimeType(ContentService.MimeType.TEXT);
+    .setMimeType(ContentService.MimeType.TEXT)
+    .append(""); 
 }
 
+/* --- PUBLIC GET (Health Check) --- */
 function doGet(e) {
   return ContentService.createTextOutput(JSON.stringify({ 
     status: "online", 
@@ -26,10 +28,10 @@ function doGet(e) {
   })).setMimeType(ContentService.MimeType.JSON);
 }
 
+/* --- MAIN POST HANDLER --- */
 function doPost(e) {
   var lock = LockService.getScriptLock();
-  // tryLock returns true if lock acquired, false if timeout. 
-  // We MUST handle the failure case to avoid concurrent writes or crashes.
+  // Wait up to 10s for other requests to finish
   var hasLock = lock.tryLock(10000); 
 
   if (!hasLock) {
@@ -40,22 +42,13 @@ function doPost(e) {
   }
 
   try {
-    // Robust parsing: Handle if postData is missing or malformed
     var contents = (e && e.postData && e.postData.contents) ? e.postData.contents : "{}";
-    var data;
-    try {
-      data = JSON.parse(contents);
-    } catch (parseError) {
-      return ContentService.createTextOutput(JSON.stringify({
-        success: false,
-        message: "Invalid JSON payload"
-      })).setMimeType(ContentService.MimeType.JSON);
-    }
-
+    var data = JSON.parse(contents);
     var action = data.action;
     var result = { success: false, message: "Invalid action" };
 
     switch (action) {
+      // AUTH
       case "login":
         result = adminLogin(data.email, data.password);
         break;
@@ -74,6 +67,8 @@ function doPost(e) {
       case "deleteAdmin":
         result = deleteAdmin(data.email);
         break;
+
+      // TOURNAMENTS
       case "getTournaments":
         result = getTournaments();
         break;
@@ -83,6 +78,8 @@ function doPost(e) {
       case "deleteTournament":
         result = deleteTournament(data.tournamentId);
         break;
+
+      // TEAMS
       case "getTeams":
         result = getTeams(data);
         break;
@@ -92,6 +89,8 @@ function doPost(e) {
       case "deleteTeam":
         result = deleteTeam(data.teamId);
         break;
+
+      // MATCHES
       case "getMatches":
         result = getMatches();
         break;
@@ -101,6 +100,8 @@ function doPost(e) {
       case "deleteMatch":
         result = deleteMatch(data.id);
         break;
+
+      // PLAYERS
       case "getPlayers":
         result = getPlayers(data);
         break;
@@ -113,6 +114,8 @@ function doPost(e) {
       case "deletePlayer":
         result = deletePlayer(data.playerId);
         break;
+
+      // STANDINGS
       case "getStandings":
         result = getStandings();
         break;
@@ -122,6 +125,8 @@ function doPost(e) {
       case "deleteStanding":
         result = deleteStanding(data.teamId, data.category);
         break;
+
+      // BLOGS
       case "getBlogPosts":
         result = getBlogPosts();
         break;
@@ -131,6 +136,8 @@ function doPost(e) {
       case "deleteBlogPost":
         result = deleteBlogPost(data.id);
         break;
+
+      // RULES
       case "getRules":
         result = getRules();
         break;
@@ -143,20 +150,16 @@ function doPost(e) {
       .setMimeType(ContentService.MimeType.JSON);
 
   } catch (err) {
-    // CRITICAL: Catch any script errors and return them as JSON 
-    // This prevents the HTML error page which causes CORS failures
     return ContentService.createTextOutput(JSON.stringify({
       success: false,
       message: "Server Error: " + err.toString()
     })).setMimeType(ContentService.MimeType.JSON);
   } finally {
-    // Only release if we actually acquired it
-    if (hasLock) {
-      lock.releaseLock();
-    }
+    if (hasLock) lock.releaseLock();
   }
 }
 
+/* --- AUTH IMPLEMENTATION --- */
 function adminLogin(email, password) {
   var sheet = getSheet(SHEETS.ADMINS);
   var data = sheet.getDataRange().getValues();
@@ -253,6 +256,7 @@ function deleteAdmin(email) {
   return { success: false, message: "Not found" };
 }
 
+/* --- TOURNAMENTS --- */
 function createTournament(data) {
   if (!isAdminLoggedIn()) return { success: false, message: "Unauthorized" };
   var sheet = getSheet(SHEETS.TOURNAMENTS);
@@ -283,6 +287,7 @@ function deleteTournament(id) {
   return deleteRowById(SHEETS.TOURNAMENTS, id);
 }
 
+/* --- TEAMS --- */
 function createTeam(data) {
   if (!isAdminLoggedIn()) return { success: false, message: "Unauthorized" };
   var sheet = getSheet(SHEETS.TEAMS);
@@ -314,6 +319,7 @@ function deleteTeam(id) {
   return deleteRowById(SHEETS.TEAMS, id);
 }
 
+/* --- MATCHES --- */
 function getMatches() {
   var sheet = getSheet(SHEETS.MATCHES);
   if (!sheet) return { success: true, matches: [] };
@@ -347,6 +353,7 @@ function deleteMatch(id) {
   return deleteRowById(SHEETS.MATCHES, id);
 }
 
+/* --- PLAYERS --- */
 function createPlayer(data) {
   if (!isAdminLoggedIn()) return { success: false, message: "Unauthorized" };
   
@@ -389,6 +396,11 @@ function getPlayers(filters) {
       fatherName: rows[i][2],
       jerseyNo: rows[i][3],
       teamId: rows[i][4],
+      teamName: rows[i][5],
+      tournamentId: rows[i][6],
+      sport: rows[i][7],
+      categoryId: rows[i][8],
+      categoryName: rows[i][9],
       photoUrl: rows[i][10]
     });
   }
@@ -424,24 +436,36 @@ function deletePlayer(playerId) {
 function savePlayerImage(base64Data, playerId) {
   try {
     var folder;
-    try { folder = DriveApp.getFolderById(PLAYER_IMAGE_FOLDER_ID); } 
-    catch(e) { folder = DriveApp.getRootFolder(); }
+    try { 
+      folder = DriveApp.getFolderById(PLAYER_IMAGE_FOLDER_ID); 
+    } catch(e) { 
+      // If folder ID invalid, default to root to prevent crash
+      folder = DriveApp.getRootFolder(); 
+    }
 
+    // "data:image/jpeg;base64,..."
     var split = base64Data.split(',');
+    if (split.length < 2) return ""; 
+
     var type = split[0].split(':')[1].split(';')[0];
     var bytes = Utilities.base64Decode(split[1]);
     var ext = type.split('/')[1];
 
     var blob = Utilities.newBlob(bytes, type, playerId + "." + ext);
     var file = folder.createFile(blob);
+    
+    // Set sharing to ANYONE_WITH_LINK so 'lh3' URL works for everyone
     file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
     
+    // Return a direct displayable URL
     return "https://lh3.googleusercontent.com/d/" + file.getId();
   } catch(e) {
+    // Log error internally if possible, return empty string for UI
     return "";
   }
 }
 
+/* --- STANDINGS --- */
 function getStandings() {
   var sheet = getSheet(SHEETS.STANDINGS);
   if (!sheet) return { success: true, standings: [] };
@@ -490,6 +514,7 @@ function deleteStanding(teamId, category) {
   return { success: false, message: "Not found" };
 }
 
+/* --- BLOGS --- */
 function getBlogPosts() {
   var sheet = getSheet(SHEETS.BLOGS);
   if (!sheet) return { success: true, blogs: [] };
@@ -519,6 +544,7 @@ function deleteBlogPost(id) {
   return deleteRowById(SHEETS.BLOGS, id);
 }
 
+/* --- RULES --- */
 function getRules() {
   var sheet = getSheet(SHEETS.RULES);
   if (!sheet) return { success: true, football: [], volleyball: [] };
@@ -539,6 +565,7 @@ function saveRules(fb, vb) {
   return { success: true, message: "Saved" };
 }
 
+/* --- HELPERS --- */
 function getSheet(name) {
   var ss;
   if (SPREADSHEET_ID) ss = SpreadsheetApp.openById(SPREADSHEET_ID);
@@ -549,6 +576,7 @@ function getSheet(name) {
   var sheet = ss.getSheetByName(name);
   if (!sheet) {
     sheet = ss.insertSheet(name);
+    // Initialize headers if creating new
     if(name === SHEETS.ADMINS) sheet.appendRow(["ID", "Name", "Email", "Password", "MustChange", "CreatedAt"]);
     if(name === SHEETS.TEAMS) sheet.appendRow(["ID", "Name", "TournID", "Logo", "Sport", "CatID", "CatName"]);
     if(name === SHEETS.PLAYERS) sheet.appendRow(["ID", "Name", "Father", "Jersey", "TeamID", "TeamName", "TournID", "Sport", "CatID", "CatName", "Photo", "Admin", "Date"]);
