@@ -15,29 +15,19 @@ var SHEETS = {
   RULES: "Rules"
 };
 
-/**
- * !!! CRITICAL STEP !!!
- * 1. Select 'authorizeScript' from the function dropdown in the Editor.
- * 2. Click 'Run'.
- * 3. Review Permissions -> Choose Account -> Advanced -> Go to ... (unsafe) -> Allow.
- * 4. AFTER THIS, YOU MUST DEPLOY A "NEW VERSION".
- */
 function authorizeScript() {
-  // We perform a read AND write operation to force Google to ask for full Drive scope.
   var folder = DriveApp.getRootFolder();
   var file = folder.createFile("temp_auth_check.txt", "Auth Check");
   file.setTrashed(true);
   console.log("Script is fully authorized for Read/Write access to Drive.");
 }
 
-/* --- CORS SUPPORT --- */
 function doOptions(e) {
   return ContentService.createTextOutput("")
     .setMimeType(ContentService.MimeType.TEXT)
     .append(""); 
 }
 
-/* --- PUBLIC GET (Health Check) --- */
 function doGet(e) {
   return ContentService.createTextOutput(JSON.stringify({ 
     status: "online", 
@@ -45,7 +35,6 @@ function doGet(e) {
   })).setMimeType(ContentService.MimeType.JSON);
 }
 
-/* --- MAIN POST HANDLER --- */
 function doPost(e) {
   var lock = LockService.getScriptLock();
   var hasLock = lock.tryLock(30000); 
@@ -65,101 +54,48 @@ function doPost(e) {
 
     switch (action) {
       // AUTH
-      case "login":
-        result = adminLogin(data.email, data.password);
-        break;
-      case "logout":
-        result = adminLogout();
-        break;
-      case "createAdmin":
-        result = createAdmin(data.name, data.email, data.password);
-        break;
-      case "getAdmins":
-        result = getAdmins();
-        break;
-      case "changePassword":
-        result = changePassword(data.email, data.oldPassword, data.newPassword);
-        break;
-      case "deleteAdmin":
-        result = deleteAdmin(data.email);
-        break;
+      case "login": result = adminLogin(data.email, data.password); break;
+      case "logout": result = adminLogout(); break;
+      case "createAdmin": result = createAdmin(data.name, data.email, data.password); break;
+      case "getAdmins": result = getAdmins(); break;
+      case "changePassword": result = changePassword(data.email, data.oldPassword, data.newPassword); break;
+      case "deleteAdmin": result = deleteAdmin(data.email); break;
 
       // TOURNAMENTS
-      case "getTournaments":
-        result = getTournaments();
-        break;
-      case "createTournament":
-        result = createTournament(data);
-        break;
-      case "deleteTournament":
-        result = deleteTournament(data.tournamentId);
-        break;
+      case "getTournaments": result = getTournaments(); break;
+      case "createTournament": result = createTournament(data); break;
+      case "deleteTournament": result = deleteTournament(data.tournamentId); break;
 
       // TEAMS
-      case "getTeams":
-        result = getTeams(data);
-        break;
-      case "createTeam":
-        result = createTeam(data);
-        break;
-      case "deleteTeam":
-        result = deleteTeam(data.teamId);
-        break;
+      case "getTeams": result = getTeams(data); break;
+      case "createTeam": result = createTeam(data); break;
+      case "deleteTeam": result = deleteTeam(data.teamId); break;
 
-      // MATCHES
-      case "getMatches":
-        result = getMatches();
-        break;
-      case "upsertMatch":
-        result = upsertMatch(data.data);
-        break;
-      case "deleteMatch":
-        result = deleteMatch(data.id);
-        break;
+      // MATCHES (New Logic)
+      case "createMatch": result = createMatch(data); break;
+      case "getMatches": result = getMatches(data); break;
+      case "updateMatch": result = updateMatch(data); break;
+      case "deleteMatch": result = deleteMatch(data.matchId); break;
 
       // PLAYERS
-      case "getPlayers":
-        result = getPlayers(data);
-        break;
-      case "createPlayer":
-        result = createPlayer(data);
-        break;
-      case "updatePlayer":
-        result = updatePlayer(data);
-        break;
-      case "deletePlayer":
-        result = deletePlayer(data.playerId);
-        break;
+      case "getPlayers": result = getPlayers(data); break;
+      case "createPlayer": result = createPlayer(data); break;
+      case "updatePlayer": result = updatePlayer(data); break;
+      case "deletePlayer": result = deletePlayer(data.playerId); break;
 
       // STANDINGS
-      case "getStandings":
-        result = getStandings();
-        break;
-      case "upsertStanding":
-        result = upsertStanding(data.data);
-        break;
-      case "deleteStanding":
-        result = deleteStanding(data.teamId, data.category);
-        break;
+      case "getStandings": result = getStandings(); break;
+      case "upsertStanding": result = upsertStanding(data.data); break;
+      case "deleteStanding": result = deleteStanding(data.teamId, data.category); break;
 
       // BLOGS
-      case "getBlogPosts":
-        result = getBlogPosts();
-        break;
-      case "upsertBlogPost":
-        result = upsertBlogPost(data.data);
-        break;
-      case "deleteBlogPost":
-        result = deleteBlogPost(data.id);
-        break;
+      case "getBlogPosts": result = getBlogPosts(); break;
+      case "upsertBlogPost": result = upsertBlogPost(data.data); break;
+      case "deleteBlogPost": result = deleteBlogPost(data.id); break;
 
       // RULES
-      case "getRules":
-        result = getRules();
-        break;
-      case "saveRules":
-        result = saveRules(data.football, data.volleyball);
-        break;
+      case "getRules": result = getRules(); break;
+      case "saveRules": result = saveRules(data.football, data.volleyball); break;
     }
 
     return ContentService.createTextOutput(JSON.stringify(result))
@@ -175,7 +111,7 @@ function doPost(e) {
   }
 }
 
-/* --- AUTH IMPLEMENTATION --- */
+/* --- AUTH --- */
 function adminLogin(email, password) {
   var sheet = getSheet(SHEETS.ADMINS);
   var data = sheet.getDataRange().getValues();
@@ -196,17 +132,9 @@ function adminLogin(email, password) {
   }
 
   for (var i = 1; i < data.length; i++) {
-    var dbEmail = String(data[i][2]).trim();
-    var dbPass = String(data[i][3]).trim();
-    
-    if (dbEmail == String(email).trim() && dbPass == String(password).trim()) {
+    if (String(data[i][2]).trim() == String(email).trim() && String(data[i][3]).trim() == String(password).trim()) {
       PropertiesService.getUserProperties().setProperty("loggedInAdmin", email);
-      return {
-        success: true,
-        email: email,
-        name: data[i][1],
-        mustChangePassword: data[i][4] === true || String(data[i][4]) === "true"
-      };
+      return { success: true, email: email, name: data[i][1], mustChangePassword: data[i][4] === true || String(data[i][4]) === "true" };
     }
   }
   return { success: false, message: "Invalid credentials" };
@@ -235,13 +163,7 @@ function getAdmins() {
   var data = sheet.getDataRange().getValues();
   var admins = [];
   for (var i = 1; i < data.length; i++) {
-    admins.push({
-      adminId: data[i][0],
-      name: data[i][1],
-      email: data[i][2],
-      mustChangePassword: data[i][4],
-      createdAt: data[i][5]
-    });
+    admins.push({ adminId: data[i][0], name: data[i][1], email: data[i][2], mustChangePassword: data[i][4], createdAt: data[i][5] });
   }
   return { success: true, admins: admins };
 }
@@ -261,15 +183,7 @@ function changePassword(email, oldPw, newPw) {
 
 function deleteAdmin(email) {
   if (!isAdminLoggedIn()) return { success: false, message: "Unauthorized" };
-  var sheet = getSheet(SHEETS.ADMINS);
-  var data = sheet.getDataRange().getValues();
-  for (var i = 1; i < data.length; i++) {
-    if (data[i][2] == email) {
-      sheet.deleteRow(i + 1);
-      return { success: true, message: "Admin deleted" };
-    }
-  }
-  return { success: false, message: "Not found" };
+  return deleteRowByColumn(SHEETS.ADMINS, 2, email); // Col 2 is Email
 }
 
 /* --- TOURNAMENTS --- */
@@ -287,13 +201,7 @@ function getTournaments() {
   var data = sheet.getDataRange().getValues();
   var list = [];
   for (var i = 1; i < data.length; i++) {
-    list.push({
-      tournamentId: data[i][0],
-      tournamentName: data[i][1],
-      sport: data[i][2],
-      categoryId: data[i][3],
-      categoryName: data[i][4]
-    });
+    list.push({ tournamentId: data[i][0], tournamentName: data[i][1], sport: data[i][2], categoryId: data[i][3], categoryName: data[i][4] });
   }
   return { success: true, tournaments: list };
 }
@@ -318,14 +226,7 @@ function getTeams(filters) {
   var data = sheet.getDataRange().getValues();
   var list = [];
   for (var i = 1; i < data.length; i++) {
-    list.push({
-      teamId: data[i][0],
-      teamName: data[i][1],
-      tournamentId: data[i][2],
-      sport: data[i][4],
-      categoryId: data[i][5],
-      categoryName: data[i][6]
-    });
+    list.push({ teamId: data[i][0], teamName: data[i][1], tournamentId: data[i][2], sport: data[i][4], categoryId: data[i][5], categoryName: data[i][6] });
   }
   return { success: true, teams: list };
 }
@@ -335,44 +236,97 @@ function deleteTeam(id) {
   return deleteRowById(SHEETS.TEAMS, id);
 }
 
-/* --- MATCHES --- */
-function getMatches() {
+/* --- MATCHES (NEW) --- */
+function createMatch(data) {
+  if (!isAdminLoggedIn()) return { success: false, message: "Unauthorized" };
+  if (!data.teamAId || !data.teamBId || !data.matchDate) return { success: false, message: "Missing required fields" };
+
   var sheet = getSheet(SHEETS.MATCHES);
-  if (!sheet) return { success: true, matches: [] };
-  var data = sheet.getDataRange().getValues();
-  var list = [];
-  for (var i = 1; i < data.length; i++) {
-    list.push({
-      id: data[i][0],
-      homeTeamId: data[i][1],
-      awayTeamId: data[i][2],
-      date: data[i][3],
-      scoreHome: data[i][4],
-      scoreAway: data[i][5],
-      status: data[i][6],
-      sport: data[i][7],
-      category: data[i][8],
-      location: data[i][9]
+  var adminEmail = PropertiesService.getUserProperties().getProperty("loggedInAdmin");
+  var matchId = "match_" + Date.now();
+
+  // Columns: matchId, tournId, tournName, sport, catId, catName, teamAId, teamAName, teamBId, teamBName, matchDate, matchTime, venue, scoreA, scoreB, status, createdBy, createdAt
+  sheet.appendRow([
+    matchId,
+    data.tournamentId,
+    data.tournamentName,
+    data.sport,
+    data.categoryId,
+    data.categoryName,
+    data.teamAId,
+    data.teamAName,
+    data.teamBId,
+    data.teamBName,
+    new Date(data.matchDate),
+    data.matchTime || "",
+    data.venue || "",
+    "", // teamAScore
+    "", // teamBScore
+    "Upcoming",
+    adminEmail,
+    new Date()
+  ]);
+
+  return { success: true, message: "Match created", matchId: matchId };
+}
+
+function getMatches(filters) {
+  var sheet = getSheet(SHEETS.MATCHES);
+  var rows = sheet.getDataRange().getValues();
+  var matches = [];
+
+  // Start at i=1 to skip header
+  for (var i = 1; i < rows.length; i++) {
+    // Optional filtering logic if needed in future
+    matches.push({
+        matchId: rows[i][0],
+        tournamentId: rows[i][1],
+        tournamentName: rows[i][2],
+        sport: rows[i][3],
+        categoryId: rows[i][4],
+        categoryName: rows[i][5],
+        teamA: { id: rows[i][6], name: rows[i][7], score: rows[i][13] },
+        teamB: { id: rows[i][8], name: rows[i][9], score: rows[i][14] },
+        matchDate: rows[i][10],
+        matchTime: rows[i][11],
+        venue: rows[i][12],
+        status: rows[i][15]
     });
   }
-  return { success: true, matches: list };
+  return { success: true, matches: matches };
 }
 
-function upsertMatch(m) {
+function updateMatch(data) {
   if (!isAdminLoggedIn()) return { success: false, message: "Unauthorized" };
+  
   var sheet = getSheet(SHEETS.MATCHES);
-  return upsertRow(sheet, m.id, [m.id, m.homeTeamId, m.awayTeamId, m.date, m.scoreHome, m.scoreAway, m.status, m.sport, m.category, m.location]);
+  var rows = sheet.getDataRange().getValues();
+
+  for (var i = 1; i < rows.length; i++) {
+    if (rows[i][0] === data.matchId) {
+      // Update fields based on what's passed
+      if (data.matchDate) sheet.getRange(i + 1, 11).setValue(new Date(data.matchDate));
+      if (data.matchTime) sheet.getRange(i + 1, 12).setValue(data.matchTime);
+      if (data.venue) sheet.getRange(i + 1, 13).setValue(data.venue);
+
+      if (data.teamAScore !== undefined) sheet.getRange(i + 1, 14).setValue(data.teamAScore);
+      if (data.teamBScore !== undefined) sheet.getRange(i + 1, 15).setValue(data.teamBScore);
+      if (data.status) sheet.getRange(i + 1, 16).setValue(data.status);
+
+      return { success: true, message: "Match updated" };
+    }
+  }
+  return { success: false, message: "Match not found" };
 }
 
-function deleteMatch(id) {
+function deleteMatch(matchId) {
   if (!isAdminLoggedIn()) return { success: false, message: "Unauthorized" };
-  return deleteRowById(SHEETS.MATCHES, id);
+  return deleteRowById(SHEETS.MATCHES, matchId);
 }
 
 /* --- PLAYERS --- */
 function createPlayer(data) {
   if (!isAdminLoggedIn()) return { success: false, message: "Unauthorized" };
-  
   var sheet = getSheet(SHEETS.PLAYERS);
   var playerId = "pl_" + Date.now();
   var adminEmail = PropertiesService.getUserProperties().getProperty("loggedInAdmin") || "unknown";
@@ -380,33 +334,12 @@ function createPlayer(data) {
   var photoUrl = "";
   if (data.imageBase64 && data.imageBase64.length > 100) {
     photoUrl = savePlayerImage(data.imageBase64, playerId);
-    // CRITICAL: Check for error immediately
-    if (photoUrl.indexOf("Error") === 0) {
-        return { success: false, message: photoUrl };
-    }
+    if (photoUrl.indexOf("Error") === 0) return { success: false, message: photoUrl };
   } else {
-    // If no base64, check if an existing URL was passed (rare for create, but good for safety)
     photoUrl = (data.photoUrl && data.photoUrl.startsWith("http")) ? data.photoUrl : "";
   }
 
-  // Row Structure based on headers provided:
-  // playerId (0), playerName (1), fatherName (2), jerseyNo (3), teamId (4), teamName (5), tournamentId (6), sport (7), categoryId (8), categoryName (9), photoUrl (10)
-  sheet.appendRow([
-    playerId,
-    data.playerName,
-    data.fatherName || "",
-    data.jerseyNo || "",
-    data.teamId,
-    data.teamName || "",
-    data.tournamentId || "",
-    data.sport || "",
-    data.categoryId || "",
-    data.categoryName || "",
-    photoUrl, 
-    adminEmail, // Extra metadata
-    new Date() // Extra metadata
-  ]);
-
+  sheet.appendRow([playerId, data.playerName, data.fatherName || "", data.jerseyNo || "", data.teamId, data.teamName || "", data.tournamentId || "", data.sport || "", data.categoryId || "", data.categoryName || "", photoUrl, adminEmail, new Date()]);
   return { success: true, message: "Player created", playerId: playerId };
 }
 
@@ -442,14 +375,9 @@ function updatePlayer(data) {
       if(data.playerName) sheet.getRange(i + 1, 2).setValue(data.playerName);
       if(data.fatherName) sheet.getRange(i + 1, 3).setValue(data.fatherName);
       if(data.jerseyNo) sheet.getRange(i + 1, 4).setValue(data.jerseyNo);
-
       if (data.imageBase64 && data.imageBase64.length > 100) {
         var newPhoto = savePlayerImage(data.imageBase64, data.playerId);
-        // CRITICAL: Check for error immediately
-        if (newPhoto.indexOf("Error") === 0) {
-            return { success: false, message: newPhoto };
-        }
-        // photoUrl is at index 10, so column 11
+        if (newPhoto.indexOf("Error") === 0) return { success: false, message: newPhoto };
         sheet.getRange(i + 1, 11).setValue(newPhoto);
       }
       return { success: true, message: "Player updated" };
@@ -467,78 +395,39 @@ function getOrCreateFolder() {
     var folderName = "Motbung_Player_Images";
     var folders = DriveApp.getFoldersByName(folderName);
     var folder;
-    if (folders.hasNext()) {
-        folder = folders.next();
-    } else {
-        folder = DriveApp.createFolder(folderName);
-    }
+    if (folders.hasNext()) folder = folders.next();
+    else folder = DriveApp.createFolder(folderName);
     
-    // Ensure folder is public so files inside inherit this visibility
-    try {
-        folder.setSharing(DriveApp.Access.ANYONE, DriveApp.Permission.VIEW);
-    } catch(e) {
-        try {
-            folder.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-        } catch(e2) {}
-    }
+    try { folder.setSharing(DriveApp.Access.ANYONE, DriveApp.Permission.VIEW); } 
+    catch(e) { try { folder.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch(e2) {} }
     return folder;
 }
 
 function savePlayerImage(base64Data, playerId) {
   try {
-    // 1. Get Folder
     var folder;
     try {
-        if (PLAYER_IMAGE_FOLDER_ID && PLAYER_IMAGE_FOLDER_ID !== "") {
-            folder = DriveApp.getFolderById(PLAYER_IMAGE_FOLDER_ID);
-        } else {
-            throw new Error("No ID");
-        }
-    } catch(e) {
-        // Fallback: Create folder in the Drive of the account running the script (You)
-        folder = getOrCreateFolder();
-    }
+        if (PLAYER_IMAGE_FOLDER_ID && PLAYER_IMAGE_FOLDER_ID !== "") folder = DriveApp.getFolderById(PLAYER_IMAGE_FOLDER_ID);
+        else throw new Error("No ID");
+    } catch(e) { folder = getOrCreateFolder(); }
 
-    // 2. Parse Base64
     var split = base64Data.split(',');
     if (split.length < 2) return "Error: Invalid Base64"; 
-
     var type = split[0].split(':')[1].split(';')[0];
     var bytes = Utilities.base64Decode(split[1]);
-    
-    var ext = "jpg";
-    if (type.includes("png")) ext = "png";
-    if (type.includes("jpeg")) ext = "jpg";
+    var ext = type.includes("png") ? "png" : "jpg";
 
-    // 3. Create File
     var blob = Utilities.newBlob(bytes, type, playerId + "." + ext);
-    // Delete existing file if present to avoid duplicates
     var existing = folder.getFilesByName(playerId + "." + ext);
-    while (existing.hasNext()) {
-        existing.next().setTrashed(true);
-    }
+    while (existing.hasNext()) existing.next().setTrashed(true);
     
     var file = folder.createFile(blob);
+    try { file.setSharing(DriveApp.Access.ANYONE, DriveApp.Permission.VIEW); } catch(e) { try { file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (e2) {} }
     
-    // 4. Permissions
-    try {
-      file.setSharing(DriveApp.Access.ANYONE, DriveApp.Permission.VIEW);
-    } catch(e) {
-      try {
-        file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-      } catch (e2) {}
-    }
-    
-    // 5. Return URL
-    // https://drive.google.com/uc?export=view&id=FILE_ID is the most standard direct link.
-    // 'thumbnail' links can sometimes be flaky if not logged in.
-    return "https://drive.google.com/uc?export=view&id=" + file.getId();
-
+    return "https://lh3.googleusercontent.com/d/" + file.getId();
   } catch(e) {
     var msg = e.toString();
-    if (msg.includes("permission") || msg.includes("authorization")) {
-        return "Error: Script needs Authorization. Run authorizeScript() in editor, then Deploy NEW Version.";
-    }
+    if (msg.includes("permission") || msg.includes("authorization")) return "Error: Script needs Authorization.";
     return "Error Uploading: " + msg;
   }
 }
@@ -550,15 +439,7 @@ function getStandings() {
   var data = sheet.getDataRange().getValues();
   var list = [];
   for (var i = 1; i < data.length; i++) {
-    list.push({
-      teamId: data[i][0],
-      played: data[i][1],
-      won: data[i][2],
-      drawn: data[i][3],
-      lost: data[i][4],
-      points: data[i][5],
-      category: data[i][6]
-    });
+    list.push({ teamId: data[i][0], played: data[i][1], won: data[i][2], drawn: data[i][3], lost: data[i][4], points: data[i][5], category: data[i][6] });
   }
   return { success: true, standings: list };
 }
@@ -592,21 +473,14 @@ function deleteStanding(teamId, category) {
   return { success: false, message: "Not found" };
 }
 
-/* --- BLOGS --- */
+/* --- BLOGS & RULES (UNCHANGED) --- */
 function getBlogPosts() {
   var sheet = getSheet(SHEETS.BLOGS);
   if (!sheet) return { success: true, blogs: [] };
   var data = sheet.getDataRange().getValues();
   var list = [];
   for (var i = 1; i < data.length; i++) {
-    list.push({
-      id: data[i][0],
-      title: data[i][1],
-      summary: data[i][2],
-      date: data[i][3],
-      author: data[i][4],
-      image: data[i][5]
-    });
+    list.push({ id: data[i][0], title: data[i][1], summary: data[i][2], date: data[i][3], author: data[i][4], image: data[i][5] });
   }
   return { success: true, blogs: list };
 }
@@ -622,7 +496,6 @@ function deleteBlogPost(id) {
   return deleteRowById(SHEETS.BLOGS, id);
 }
 
-/* --- RULES --- */
 function getRules() {
   var sheet = getSheet(SHEETS.RULES);
   if (!sheet) return { success: true, football: [], volleyball: [] };
@@ -654,10 +527,12 @@ function getSheet(name) {
   var sheet = ss.getSheetByName(name);
   if (!sheet) {
     sheet = ss.insertSheet(name);
+    // Initialize headers
     if(name === SHEETS.ADMINS) sheet.appendRow(["ID", "Name", "Email", "Password", "MustChange", "CreatedAt"]);
     if(name === SHEETS.TEAMS) sheet.appendRow(["ID", "Name", "TournID", "Logo", "Sport", "CatID", "CatName"]);
     if(name === SHEETS.PLAYERS) sheet.appendRow(["ID", "Name", "Father", "Jersey", "TeamID", "TeamName", "TournID", "Sport", "CatID", "CatName", "Photo", "Admin", "Date"]);
-    if(name === SHEETS.MATCHES) sheet.appendRow(["ID", "Home", "Away", "Date", "ScoreH", "ScoreA", "Status", "Sport", "Category", "Location"]);
+    // NEW MATCHES HEADER (18 cols)
+    if(name === SHEETS.MATCHES) sheet.appendRow(["matchId", "tournamentId", "tournamentName", "sport", "categoryId", "categoryName", "teamAId", "teamAName", "teamBId", "teamBName", "matchDate", "matchTime", "venue", "teamAScore", "teamBScore", "matchStatus", "createdBy", "createdAt"]);
     if(name === SHEETS.STANDINGS) sheet.appendRow(["TeamID", "Played", "Won", "Drawn", "Lost", "Points", "Category"]);
     if(name === SHEETS.BLOGS) sheet.appendRow(["ID", "Title", "Summary", "Date", "Author", "Image"]);
     if(name === SHEETS.TOURNAMENTS) sheet.appendRow(["ID", "Name", "Sport", "CatID", "CatName"]);
@@ -687,4 +562,16 @@ function deleteRowById(sheetName, id) {
     }
   }
   return { success: false, message: "Not found" };
+}
+
+function deleteRowByColumn(sheetName, colIndex, value) {
+    var sheet = getSheet(sheetName);
+    var data = sheet.getDataRange().getValues();
+    for (var i = 1; i < data.length; i++) {
+        if (data[i][colIndex] == value) {
+            sheet.deleteRow(i + 1);
+            return { success: true, message: "Deleted" };
+        }
+    }
+    return { success: false, message: "Not found" };
 }

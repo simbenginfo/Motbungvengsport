@@ -111,12 +111,57 @@ export const api = {
   getMatches: async (): Promise<Match[]> => {
     const result = await postToBackend<{success: boolean, matches: any[]}>({ action: 'getMatches' });
     if (result.success && Array.isArray(result.matches)) {
-        return result.matches; 
+        return result.matches.map(m => ({
+            id: m.matchId,
+            tournamentId: m.tournamentId,
+            tournamentName: m.tournamentName,
+            sport: m.sport,
+            categoryId: m.categoryId,
+            categoryName: m.categoryName,
+            teamA: { id: m.teamA.id, name: m.teamA.name, score: m.teamA.score },
+            teamB: { id: m.teamB.id, name: m.teamB.name, score: m.teamB.score },
+            date: m.matchDate,
+            time: m.matchTime,
+            venue: m.venue,
+            status: m.status
+        })); 
     }
     return INITIAL_MATCHES;
   },
-  upsertMatch: (match: Match) => postToBackend<GenericResponse>({ action: 'upsertMatch', data: match }),
-  deleteMatch: (id: string) => postToBackend<GenericResponse>({ action: 'deleteMatch', id }),
+
+  upsertMatch: (match: Match) => {
+    // New backend logic has distinct create/update actions
+    if (!match.id || match.id.startsWith('M')) { // 'M' is client-side temp ID
+        return postToBackend<GenericResponse>({
+            action: 'createMatch',
+            tournamentId: match.tournamentId,
+            tournamentName: match.tournamentName,
+            sport: match.sport,
+            categoryId: match.categoryId,
+            categoryName: match.categoryName,
+            teamAId: match.teamA.id,
+            teamAName: match.teamA.name,
+            teamBId: match.teamB.id,
+            teamBName: match.teamB.name,
+            matchDate: match.date,
+            matchTime: match.time,
+            venue: match.venue
+        });
+    } else {
+        return postToBackend<GenericResponse>({
+            action: 'updateMatch',
+            matchId: match.id,
+            matchDate: match.date,
+            matchTime: match.time,
+            venue: match.venue,
+            teamAScore: match.teamA.score,
+            teamBScore: match.teamB.score,
+            status: match.status
+        });
+    }
+  },
+  
+  deleteMatch: (id: string) => postToBackend<GenericResponse>({ action: 'deleteMatch', matchId: id }),
 
   // Players
   getPlayers: async (): Promise<Player[]> => {

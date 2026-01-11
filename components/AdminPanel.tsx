@@ -90,7 +90,6 @@ export const AdminPanel: React.FC = () => {
         img.onload = () => {
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
-            // Limit size to 300px to fit in Google Sheets cell limit easily
             const MAX_SIZE = 300; 
             let width = img.width;
             let height = img.height;
@@ -108,7 +107,6 @@ export const AdminPanel: React.FC = () => {
             canvas.width = width;
             canvas.height = height;
             ctx?.drawImage(img, 0, 0, width, height);
-            // Compress to JPEG 0.6 quality
             const dataUrl = canvas.toDataURL('image/jpeg', 0.6); 
             callback(dataUrl);
         };
@@ -212,19 +210,43 @@ export const AdminPanel: React.FC = () => {
     e.preventDefault();
     if (!editingMatch) return;
     setLoading(true);
-    const matchToSave = {
-        ...editingMatch,
-        id: editingMatch.id || `M${Date.now()}`,
-        date: editingMatch.date || new Date().toISOString()
-    } as Match;
+
+    // Prepare payload. For new matches, we need full Tournament details.
+    // For updates, we usually just need IDs and new scores/status.
     
-    const res = await api.upsertMatch(matchToSave);
+    // If it's a new match, find tournament details from the selected tournament ID
+    let matchPayload = {...editingMatch} as Match;
+    
+    if (!matchPayload.id) {
+         const tourn = tournaments.find(t => t.id === matchPayload.tournamentId);
+         const teamA = teams.find(t => t.id === matchPayload.teamA?.id);
+         const teamB = teams.find(t => t.id === matchPayload.teamB?.id);
+         
+         if (!tourn || !teamA || !teamB) {
+             setActionStatus("Error: Missing tournament or team selection");
+             setLoading(false);
+             return;
+         }
+
+         matchPayload = {
+             ...matchPayload,
+             tournamentName: tourn.name,
+             sport: tourn.sport,
+             categoryId: tourn.categoryId,
+             categoryName: tourn.categoryName,
+             teamA: { id: teamA.id, name: teamA.name },
+             teamB: { id: teamB.id, name: teamB.name }
+         };
+    }
+
+    const res = await api.upsertMatch(matchPayload);
+    
     if (res.success) {
         setEditingMatch(null);
         loadAllData();
         setActionStatus('Match saved successfully');
     } else {
-        setActionStatus('Failed to save match');
+        setActionStatus('Failed to save match: ' + res.message);
     }
     setLoading(false);
     setTimeout(() => setActionStatus(''), 3000);
@@ -271,13 +293,7 @@ export const AdminPanel: React.FC = () => {
         setActionStatus('Player saved successfully');
     } else {
         if (res.message && (res.message.includes('Authorization') || res.message.includes('permission'))) {
-            alert(
-              "GOOGLE PERMISSION ERROR:\n\n" +
-              "1. Go to Google Script Editor.\n" + 
-              "2. Run 'authorizeScript' function and Accept permissions.\n" +
-              "3. CRITICAL: Click 'Deploy' -> 'Manage Deployments' -> 'Edit' -> 'New Version' -> 'Deploy'.\n\n" +
-              "If you do not create a New Version, the web app will not see the permissions you just granted."
-            );
+            alert("GOOGLE PERMISSION ERROR: Please re-authorize the script in Google Editor and Deploy New Version.");
         }
         setActionStatus('Failed: ' + (res.message || 'Error'));
     }
@@ -396,7 +412,7 @@ export const AdminPanel: React.FC = () => {
   // --- RENDER HELPERS ---
   
   if (!auth) {
-    // LOGIN UI
+    // LOGIN UI (Same as before)
     return (
         <div className="flex flex-col items-center justify-center py-20 animate-fade-in">
             <div className="bg-brand-gray p-8 rounded-lg border border-neutral-800 max-w-sm w-full shadow-2xl relative overflow-hidden">
@@ -586,27 +602,104 @@ export const AdminPanel: React.FC = () => {
                         <div className="bg-neutral-900 p-6 rounded mb-6 border border-neutral-700 animate-fade-in">
                             <h4 className="font-bold text-gray-300 mb-4">{editingMatch.id ? 'Edit Match' : 'New Match'}</h4>
                             <form onSubmit={handleSaveMatch} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <select value={editingMatch.homeTeamId || ''} onChange={e => setEditingMatch({...editingMatch, homeTeamId: e.target.value})} className="bg-black border border-neutral-700 text-white p-2 rounded text-sm">
-                                    <option value="">Select Home Team</option>
-                                    {teams.map(t => <option key={t.id} value={t.id}>{t.name} ({t.category})</option>)}
-                                </select>
-                                <select value={editingMatch.awayTeamId || ''} onChange={e => setEditingMatch({...editingMatch, awayTeamId: e.target.value})} className="bg-black border border-neutral-700 text-white p-2 rounded text-sm">
-                                    <option value="">Select Away Team</option>
-                                    {teams.map(t => <option key={t.id} value={t.id}>{t.name} ({t.category})</option>)}
-                                </select>
-                                <input type="number" placeholder="Home Score" value={editingMatch.scoreHome ?? ''} onChange={e => setEditingMatch({...editingMatch, scoreHome: Number(e.target.value)})} className="bg-black border border-neutral-700 text-white p-2 rounded text-sm" />
-                                <input type="number" placeholder="Away Score" value={editingMatch.scoreAway ?? ''} onChange={e => setEditingMatch({...editingMatch, scoreAway: Number(e.target.value)})} className="bg-black border border-neutral-700 text-white p-2 rounded text-sm" />
-                                <select value={editingMatch.status || 'UPCOMING'} onChange={e => setEditingMatch({...editingMatch, status: e.target.value as any})} className="bg-black border border-neutral-700 text-white p-2 rounded text-sm">
-                                    <option value="UPCOMING">Upcoming</option>
-                                    <option value="LIVE">Live</option>
-                                    <option value="FINISHED">Finished</option>
-                                </select>
-                                <input type="datetime-local" value={editingMatch.date ? new Date(editingMatch.date).toISOString().slice(0, 16) : ''} onChange={e => setEditingMatch({...editingMatch, date: new Date(e.target.value).toISOString()})} className="bg-black border border-neutral-700 text-white p-2 rounded text-sm" />
-                                <input type="text" placeholder="Location" value={editingMatch.location || ''} onChange={e => setEditingMatch({...editingMatch, location: e.target.value})} className="bg-black border border-neutral-700 text-white p-2 rounded text-sm" />
-                                <select value={editingMatch.category || ''} onChange={e => setEditingMatch({...editingMatch, category: e.target.value as TeamCategory})} className="bg-black border border-neutral-700 text-white p-2 rounded text-sm">
-                                    <option value="">Select Category</option>
-                                    {Object.values(TeamCategory).map(c => <option key={c} value={c}>{c}</option>)}
-                                </select>
+                                {/* Only show Tournament Selection for NEW matches */}
+                                {!editingMatch.id && (
+                                    <div className="md:col-span-2 bg-black/50 p-3 rounded border border-neutral-800 mb-2">
+                                        <label className="text-xs text-gray-500 block mb-1">Select Tournament (Required)</label>
+                                        <select 
+                                            value={editingMatch.tournamentId || ''} 
+                                            onChange={e => {
+                                                setEditingMatch({
+                                                    ...editingMatch, 
+                                                    tournamentId: e.target.value,
+                                                    teamA: {id: '', name: ''}, // Reset teams on tourn change
+                                                    teamB: {id: '', name: ''}
+                                                });
+                                            }} 
+                                            className="w-full bg-black border border-neutral-700 text-white p-2 rounded text-sm"
+                                            required
+                                        >
+                                            <option value="">-- Choose Tournament --</option>
+                                            {tournaments.map(t => <option key={t.id} value={t.id}>{t.name} ({t.categoryName})</option>)}
+                                        </select>
+                                    </div>
+                                )}
+
+                                {/* Teams selection filtered by Tournament */}
+                                <div className="space-y-1">
+                                    <label className="text-xs text-gray-500">Team A</label>
+                                    <select 
+                                        value={editingMatch.teamA?.id || ''} 
+                                        onChange={e => {
+                                             const t = teams.find(team => team.id === e.target.value);
+                                             setEditingMatch({...editingMatch, teamA: {id: e.target.value, name: t?.name || ''}})
+                                        }} 
+                                        className="w-full bg-black border border-neutral-700 text-white p-2 rounded text-sm"
+                                        disabled={!editingMatch.tournamentId && !editingMatch.id}
+                                    >
+                                        <option value="">Select Home Team</option>
+                                        {teams
+                                            .filter(t => editingMatch.id || t.tournamentId === editingMatch.tournamentId)
+                                            .map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                                    </select>
+                                </div>
+
+                                <div className="space-y-1">
+                                    <label className="text-xs text-gray-500">Team B</label>
+                                    <select 
+                                        value={editingMatch.teamB?.id || ''} 
+                                        onChange={e => {
+                                            const t = teams.find(team => team.id === e.target.value);
+                                            setEditingMatch({...editingMatch, teamB: {id: e.target.value, name: t?.name || ''}})
+                                        }} 
+                                        className="w-full bg-black border border-neutral-700 text-white p-2 rounded text-sm"
+                                        disabled={!editingMatch.tournamentId && !editingMatch.id}
+                                    >
+                                        <option value="">Select Away Team</option>
+                                        {teams
+                                            .filter(t => editingMatch.id || t.tournamentId === editingMatch.tournamentId)
+                                            .map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                                    </select>
+                                </div>
+                                
+                                <div className="space-y-1">
+                                    <label className="text-xs text-gray-500">Match Date</label>
+                                    <input type="date" value={editingMatch.date ? new Date(editingMatch.date).toISOString().slice(0, 10) : ''} onChange={e => setEditingMatch({...editingMatch, date: new Date(e.target.value).toISOString()})} className="w-full bg-black border border-neutral-700 text-white p-2 rounded text-sm" required />
+                                </div>
+
+                                <div className="space-y-1">
+                                    <label className="text-xs text-gray-500">Time (e.g. 14:00)</label>
+                                    <input type="time" value={editingMatch.time || ''} onChange={e => setEditingMatch({...editingMatch, time: e.target.value})} className="w-full bg-black border border-neutral-700 text-white p-2 rounded text-sm" required />
+                                </div>
+                                
+                                <div className="space-y-1">
+                                    <label className="text-xs text-gray-500">Venue</label>
+                                    <input type="text" placeholder="e.g. Main Ground" value={editingMatch.venue || ''} onChange={e => setEditingMatch({...editingMatch, venue: e.target.value})} className="w-full bg-black border border-neutral-700 text-white p-2 rounded text-sm" />
+                                </div>
+
+                                <div className="space-y-1">
+                                    <label className="text-xs text-gray-500">Status</label>
+                                    <select value={editingMatch.status || 'Upcoming'} onChange={e => setEditingMatch({...editingMatch, status: e.target.value as any})} className="w-full bg-black border border-neutral-700 text-white p-2 rounded text-sm">
+                                        <option value="Upcoming">Upcoming</option>
+                                        <option value="Live">Live</option>
+                                        <option value="Completed">Completed</option>
+                                    </select>
+                                </div>
+                                
+                                {/* Score Editing only if created */}
+                                {editingMatch.id && (
+                                    <div className="md:col-span-2 grid grid-cols-2 gap-4 mt-2 bg-neutral-800/50 p-2 rounded">
+                                        <div>
+                                             <label className="text-xs text-gray-500">{editingMatch.teamA?.name || 'Home'} Score</label>
+                                             <input type="number" value={editingMatch.teamA?.score ?? ''} onChange={e => setEditingMatch({...editingMatch, teamA: {...editingMatch.teamA!, score: Number(e.target.value)}})} className="w-full bg-black border border-neutral-700 text-white p-2 rounded text-sm" />
+                                        </div>
+                                        <div>
+                                             <label className="text-xs text-gray-500">{editingMatch.teamB?.name || 'Away'} Score</label>
+                                             <input type="number" value={editingMatch.teamB?.score ?? ''} onChange={e => setEditingMatch({...editingMatch, teamB: {...editingMatch.teamB!, score: Number(e.target.value)}})} className="w-full bg-black border border-neutral-700 text-white p-2 rounded text-sm" />
+                                        </div>
+                                    </div>
+                                )}
+
                                 <div className="md:col-span-2 flex justify-end gap-2 mt-2">
                                     <button type="button" onClick={() => setEditingMatch(null)} className="px-4 py-2 text-gray-400 hover:text-white text-sm">Cancel</button>
                                     <button type="submit" className="bg-brand-red text-white px-4 py-2 rounded font-bold text-sm">Save Match</button>
@@ -620,6 +713,7 @@ export const AdminPanel: React.FC = () => {
                             <thead className="bg-neutral-900 text-xs uppercase font-bold text-gray-300">
                                 <tr>
                                     <th className="px-4 py-3">Date</th>
+                                    <th className="px-4 py-3">Category</th>
                                     <th className="px-4 py-3">Matchup</th>
                                     <th className="px-4 py-3">Score</th>
                                     <th className="px-4 py-3">Status</th>
@@ -629,13 +723,18 @@ export const AdminPanel: React.FC = () => {
                             <tbody className="divide-y divide-neutral-800">
                                 {matches.map(m => (
                                     <tr key={m.id} className="hover:bg-neutral-800/50">
-                                        <td className="px-4 py-3">{new Date(m.date).toLocaleDateString()}</td>
-                                        <td className="px-4 py-3 text-white">
-                                            {teams.find(t => t.id === m.homeTeamId)?.name} vs {teams.find(t => t.id === m.awayTeamId)?.name}
+                                        <td className="px-4 py-3 whitespace-nowrap">
+                                            {new Date(m.date).toLocaleDateString()}
+                                            <div className="text-xs text-gray-500">{m.time}</div>
                                         </td>
-                                        <td className="px-4 py-3">{m.scoreHome} - {m.scoreAway}</td>
+                                        <td className="px-4 py-3 text-xs">{m.categoryName}</td>
+                                        <td className="px-4 py-3 text-white">
+                                            {m.teamA.name} vs {m.teamB.name}
+                                            <div className="text-xs text-gray-500">{m.venue}</div>
+                                        </td>
+                                        <td className="px-4 py-3 font-mono">{m.teamA.score ?? '-'} : {m.teamB.score ?? '-'}</td>
                                         <td className="px-4 py-3">
-                                            <span className={`px-2 py-0.5 rounded text-xs font-bold ${m.status === 'LIVE' ? 'bg-red-600 text-white' : m.status === 'FINISHED' ? 'bg-neutral-700' : 'bg-blue-900 text-blue-200'}`}>{m.status}</span>
+                                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${m.status === 'Live' ? 'bg-red-600 text-white' : m.status === 'Completed' ? 'bg-neutral-700' : 'bg-blue-900 text-blue-200'}`}>{m.status}</span>
                                         </td>
                                         <td className="px-4 py-3 text-right flex justify-end gap-2">
                                             <button onClick={() => setEditingMatch(m)} className="text-blue-400 hover:text-blue-300"><Edit2 size={16}/></button>
@@ -649,7 +748,7 @@ export const AdminPanel: React.FC = () => {
                 </div>
             )}
 
-            {/* PLAYERS */}
+            {/* PLAYERS - Same as before */}
             {activeTab === 'PLAYERS' && (
                 <div>
                     <div className="flex justify-between items-center mb-6">
@@ -673,7 +772,6 @@ export const AdminPanel: React.FC = () => {
                                 <input type="number" placeholder="Jersey Number" value={editingPlayer.jerseyNumber || ''} onChange={e => setEditingPlayer({...editingPlayer, jerseyNumber: Number(e.target.value)})} className="bg-black border border-neutral-700 text-white p-2 rounded text-sm" />
                                 <input type="text" placeholder="Father's Name" value={editingPlayer.fatherName || ''} onChange={e => setEditingPlayer({...editingPlayer, fatherName: e.target.value})} className="bg-black border border-neutral-700 text-white p-2 rounded text-sm" />
                                 
-                                {/* Image Upload */}
                                 <div className="md:col-span-2">
                                     <label className="text-xs text-gray-500 mb-1 block">Player Photo</label>
                                     <div className="flex gap-2 items-center bg-black border border-neutral-700 rounded p-2">
@@ -835,7 +933,7 @@ export const AdminPanel: React.FC = () => {
                 </div>
             )}
 
-            {/* BLOGS */}
+            {/* BLOGS, RULES, ADMINS, SECURITY - Keep same structure */}
             {activeTab === 'BLOGS' && (
                 <div>
                     <div className="flex justify-between items-center mb-6">

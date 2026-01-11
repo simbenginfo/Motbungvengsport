@@ -110,8 +110,8 @@ function App() {
                     <MatchCard 
                         key={match.id} 
                         match={match} 
-                        homeTeam={getTeam(match.homeTeamId)} 
-                        awayTeam={getTeam(match.awayTeamId)} 
+                        homeTeam={getTeam(match.teamA.id)} 
+                        awayTeam={getTeam(match.teamB.id)} 
                     />
                 ))}
             </div>
@@ -160,8 +160,8 @@ function App() {
                     <MatchCard 
                         key={match.id} 
                         match={match} 
-                        homeTeam={getTeam(match.homeTeamId)} 
-                        awayTeam={getTeam(match.awayTeamId)} 
+                        homeTeam={getTeam(match.teamA.id)} 
+                        awayTeam={getTeam(match.teamB.id)} 
                     />
                 ))}
             </div>

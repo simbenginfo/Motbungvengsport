@@ -39,17 +39,27 @@ export interface Team {
   categoryName?: string;
 }
 
+export interface MatchTeam {
+  id: string;
+  name: string;
+  score?: string | number;
+}
+
 export interface Match {
   id: string;
-  homeTeamId: string;
-  awayTeamId: string;
-  date: string; // ISO string
-  scoreHome?: number;
-  scoreAway?: number;
-  status: 'UPCOMING' | 'LIVE' | 'FINISHED';
-  sport: SportType;
-  category: TeamCategory;
-  location: string;
+  tournamentId: string;
+  tournamentName: string;
+  sport: string;
+  categoryId: string;
+  categoryName: string;
+  
+  teamA: MatchTeam;
+  teamB: MatchTeam;
+  
+  date: string; // ISO string for Date
+  time: string; // HH:MM String
+  venue: string;
+  status: 'Upcoming' | 'Live' | 'Completed';
 }
 
 export interface Standing {

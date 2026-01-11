@@ -10,15 +10,52 @@ interface PlayerCardProps {
 export const PlayerCard: React.FC<PlayerCardProps> = ({ player, team }) => {
   const [imageError, setImageError] = useState(false);
   
-  // Check if image is valid URL and not an error message
-  const hasValidImage = player.image && player.image.startsWith('http') && !player.image.includes('Error');
+  // Helper to convert brittle Drive URLs to the robust lh3 format
+  const getOptimizedImageUrl = (url: string | undefined) => {
+    if (!url) return '';
+    if (url.startsWith('Error')) return url;
+    
+    // If it's already an lh3 link or base64, return as is
+    if (url.includes('lh3.googleusercontent.com') || url.startsWith('data:')) {
+        return url;
+    }
+
+    // Attempt to extract File ID from various Drive URL formats
+    let id = '';
+    try {
+        if (url.includes('id=')) {
+            // matches id=XYZ
+            const match = url.match(/id=([^&]+)/);
+            if (match) id = match[1];
+        } else if (url.includes('/file/d/')) {
+            // matches /file/d/XYZ/
+            const match = url.match(/\/file\/d\/([^/]+)/);
+            if (match) id = match[1];
+        } else if (url.includes('/d/')) {
+             // matches /d/XYZ
+            const match = url.match(/\/d\/([^/]+)/);
+            if (match) id = match[1];
+        }
+    } catch(e) {
+        console.warn("Error parsing image URL", url);
+    }
+
+    if (id) {
+        return `https://lh3.googleusercontent.com/d/${id}`;
+    }
+    
+    return url;
+  };
+
+  const displayUrl = getOptimizedImageUrl(player.image);
+  const hasValidImage = displayUrl && displayUrl.startsWith('http') && !displayUrl.includes('Error');
 
   return (
     <div className="bg-brand-gray rounded-lg overflow-hidden border border-neutral-800 hover:shadow-[0_0_15px_rgba(74,222,128,0.15)] transition-all duration-300 group">
       <div className="relative h-48 w-full bg-neutral-900 overflow-hidden flex items-center justify-center">
         {hasValidImage && !imageError ? (
             <img 
-              src={player.image} 
+              src={displayUrl} 
               alt={player.name} 
               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 opacity-80 group-hover:opacity-100" 
               onError={() => setImageError(true)}
