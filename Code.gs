@@ -1,6 +1,5 @@
 var SPREADSHEET_ID = "1RDnDJ5tMaxpcHdIYTlJOs7AbkZEmUlAGYEXeoxvu5dI";
-// Replace this with a Folder ID you have EDIT access to. 
-// If invalid, it defaults to your Google Drive Root Folder.
+// This ID is a fallback. The script will try to use a folder named "Motbung_Player_Images" first.
 var PLAYER_IMAGE_FOLDER_ID = "19twoj_GJL13WFiqX6A_SpS7joDno5p1t"; 
 
 var SHEETS = {
@@ -33,7 +32,7 @@ function doGet(e) {
 /* --- MAIN POST HANDLER --- */
 function doPost(e) {
   var lock = LockService.getScriptLock();
-  var hasLock = lock.tryLock(10000); 
+  var hasLock = lock.tryLock(30000); // Increased wait time to 30s for uploads
 
   if (!hasLock) {
     return ContentService.createTextOutput(JSON.stringify({
@@ -166,12 +165,10 @@ function adminLogin(email, password) {
   var data = sheet.getDataRange().getValues();
   var defaultEmail = "admin@motbung.com";
   
-  // Create default admin if table is empty (header only)
   if (data.length <= 1) {
      sheet.appendRow(["A_RECOVERY", "Super Admin", defaultEmail, "admin123", true, new Date()]);
      data = sheet.getDataRange().getValues();
   } else {
-     // Check if default admin was deleted, recreate if needed
      var hasDefault = false;
      for(var j=1; j<data.length; j++) {
         if(String(data[j][2]) === defaultEmail) hasDefault = true;
@@ -365,10 +362,15 @@ function createPlayer(data) {
   var adminEmail = PropertiesService.getUserProperties().getProperty("loggedInAdmin") || "unknown";
 
   var photoUrl = "";
-  if (data.imageBase64) {
+  if (data.imageBase64 && data.imageBase64.length > 100) {
     photoUrl = savePlayerImage(data.imageBase64, playerId);
+  } else {
+    // If no base64, check if an existing URL was passed (rare for create, but good for safety)
+    photoUrl = (data.photoUrl && data.photoUrl.startsWith("http")) ? data.photoUrl : "";
   }
 
+  // Row Structure based on headers provided:
+  // playerId (0), playerName (1), fatherName (2), jerseyNo (3), teamId (4), teamName (5), tournamentId (6), sport (7), categoryId (8), categoryName (9), photoUrl (10)
   sheet.appendRow([
     playerId,
     data.playerName,
@@ -380,9 +382,9 @@ function createPlayer(data) {
     data.sport || "",
     data.categoryId || "",
     data.categoryName || "",
-    photoUrl, // If savePlayerImage fails, this contains the error message
-    adminEmail,
-    new Date()
+    photoUrl, 
+    adminEmail, // Extra metadata
+    new Date() // Extra metadata
   ]);
 
   return { success: true, message: "Player created", playerId: playerId };
@@ -421,8 +423,9 @@ function updatePlayer(data) {
       if(data.fatherName) sheet.getRange(i + 1, 3).setValue(data.fatherName);
       if(data.jerseyNo) sheet.getRange(i + 1, 4).setValue(data.jerseyNo);
 
-      if (data.imageBase64) {
+      if (data.imageBase64 && data.imageBase64.length > 100) {
         var newPhoto = savePlayerImage(data.imageBase64, data.playerId);
+        // photoUrl is at index 10, so column 11
         sheet.getRange(i + 1, 11).setValue(newPhoto);
       }
       return { success: true, message: "Player updated" };
@@ -436,53 +439,65 @@ function deletePlayer(playerId) {
   return deleteRowById(SHEETS.PLAYERS, playerId);
 }
 
+function getOrCreateFolder() {
+    var folderName = "Motbung_Player_Images";
+    var folders = DriveApp.getFoldersByName(folderName);
+    if (folders.hasNext()) {
+        return folders.next();
+    } else {
+        return DriveApp.createFolder(folderName);
+    }
+}
+
 function savePlayerImage(base64Data, playerId) {
   try {
+    // 1. Get Folder: Try hardcoded ID first, then fallback to finding/creating "Motbung_Player_Images"
     var folder;
-    try { 
-      folder = DriveApp.getFolderById(PLAYER_IMAGE_FOLDER_ID); 
-    } catch(e) { 
-      // If folder ID invalid or not found, default to root
-      console.error("Folder not found, defaulting to root: " + e.toString());
-      folder = DriveApp.getRootFolder(); 
+    try {
+        if (PLAYER_IMAGE_FOLDER_ID) {
+            folder = DriveApp.getFolderById(PLAYER_IMAGE_FOLDER_ID);
+        } else {
+            throw new Error("No ID");
+        }
+    } catch(e) {
+        folder = getOrCreateFolder();
     }
 
-    // Parse "data:image/jpeg;base64,....."
+    // 2. Parse Base64
     var split = base64Data.split(',');
-    if (split.length < 2) return "Error: Invalid Base64 Data"; 
+    if (split.length < 2) return "Error: Invalid Base64"; 
 
     var type = split[0].split(':')[1].split(';')[0];
     var bytes = Utilities.base64Decode(split[1]);
     
-    // Determine extension
     var ext = "jpg";
     if (type.includes("png")) ext = "png";
     if (type.includes("jpeg")) ext = "jpg";
 
+    // 3. Create File
     var blob = Utilities.newBlob(bytes, type, playerId + "." + ext);
-    var file = folder.createFile(blob);
-    
-    // Attempt to make public. 
-    // This might fail if organization policies restrict it, but file is still created.
-    try {
-      file.setSharing(DriveApp.Access.ANYONE, DriveApp.Permission.VIEW);
-    } catch(shareError) {
-      console.error("Sharing failed: " + shareError.toString());
-      // Fallback: Try ANYONE_WITH_LINK
-      try {
-        file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-      } catch (e2) {
-         // Even if sharing fails, we return the URL. The admin might be able to see it, 
-         // but public users might not.
-      }
+    // Delete existing file if present to avoid duplicates
+    var existing = folder.getFilesByName(playerId + "." + ext);
+    while (existing.hasNext()) {
+        existing.next().setTrashed(true);
     }
     
-    // Return a direct displayable URL. 
-    // Using 'drive.google.com/uc?export=view' is often more reliable for raw image usage.
+    var file = folder.createFile(blob);
+    
+    // 4. Permissions
+    try {
+      file.setSharing(DriveApp.Access.ANYONE, DriveApp.Permission.VIEW);
+    } catch(e) {
+      try {
+        file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      } catch (e2) {}
+    }
+    
+    // 5. Return URL
+    // Use the download/view URL format that works best for <img> tags
     return "https://drive.google.com/uc?export=view&id=" + file.getId();
 
   } catch(e) {
-    // Return the actual error string so it gets saved to the sheet for debugging
     return "Error Uploading: " + e.toString();
   }
 }
@@ -598,7 +613,6 @@ function getSheet(name) {
   var sheet = ss.getSheetByName(name);
   if (!sheet) {
     sheet = ss.insertSheet(name);
-    // Initialize headers if creating new
     if(name === SHEETS.ADMINS) sheet.appendRow(["ID", "Name", "Email", "Password", "MustChange", "CreatedAt"]);
     if(name === SHEETS.TEAMS) sheet.appendRow(["ID", "Name", "TournID", "Logo", "Sport", "CatID", "CatName"]);
     if(name === SHEETS.PLAYERS) sheet.appendRow(["ID", "Name", "Father", "Jersey", "TeamID", "TeamName", "TournID", "Sport", "CatID", "CatName", "Photo", "Admin", "Date"]);
