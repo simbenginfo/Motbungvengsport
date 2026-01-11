@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { api } from '../services/api';
 import { Admin, Match, Player, Standing, BlogPost, Team, TeamCategory, Tournament } from '../types';
-import { Loader2, Lock, Mail, User, Shield, Users, Trash2, Plus, LogOut, Edit2, Save, FileText, BarChart2, BookOpen, Trophy, Flag, Upload, Image as ImageIcon } from 'lucide-react';
+import { Loader2, Lock, Mail, User, Shield, Users, Trash2, Plus, LogOut, Edit2, Save, FileText, BarChart2, BookOpen, Trophy, Flag, Upload, Image as ImageIcon, AlertTriangle } from 'lucide-react';
 
 type Tab = 'MATCHES' | 'PLAYERS' | 'STANDINGS' | 'BLOGS' | 'RULES' | 'ADMINS' | 'SECURITY' | 'TOURNAMENTS' | 'TEAMS';
 
@@ -150,17 +150,14 @@ export const AdminPanel: React.FC = () => {
   };
 
   // --- CRUD HANDLERS ---
-  // ... (Code omitted for brevity, logic remains identical to previous version)
-  // Tournaments
   const handleCreateTournament = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingTournament) return;
     setLoading(true);
-    // Backend expects: tournamentName, sport, categoryId, categoryName
     const res = await api.createTournament(
         editingTournament.name || '',
         editingTournament.sport || 'Football',
-        editingTournament.categoryId || 'cat_1', // Mock ID if not provided
+        editingTournament.categoryId || 'cat_1', 
         editingTournament.categoryName || 'General'
     );
     if (res.success) {
@@ -180,7 +177,6 @@ export const AdminPanel: React.FC = () => {
     setLoading(false);
   };
 
-  // Teams
   const handleCreateTeam = async (e: React.FormEvent) => {
       e.preventDefault();
       if (!editingTeam) return;
@@ -188,7 +184,6 @@ export const AdminPanel: React.FC = () => {
 
       const selectedTournament = tournaments.find(t => t.id === editingTeam.tournamentId);
 
-      // Backend expects: teamName, tournamentId, sport, categoryId, categoryName
       const res = await api.createTeam(
           editingTeam.name || '',
           editingTeam.tournamentId || '',
@@ -213,7 +208,6 @@ export const AdminPanel: React.FC = () => {
       setLoading(false);
   };
   
-  // Matches
   const handleSaveMatch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingMatch) return;
@@ -244,12 +238,10 @@ export const AdminPanel: React.FC = () => {
     setLoading(false);
   };
 
-  // Players
   const handleSavePlayer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingPlayer) return;
     
-    // Validation
     if (!editingPlayer.teamId) {
         setActionStatus('Please select a team');
         return;
@@ -263,7 +255,6 @@ export const AdminPanel: React.FC = () => {
         fatherName: editingPlayer.fatherName
     } as Player;
     
-    // Find the full team object to pass contextual data (tournament, sport, etc.) which backend requires
     const selectedTeam = teams.find(t => t.id === playerToSave.teamId);
 
     if (!selectedTeam) {
@@ -293,7 +284,6 @@ export const AdminPanel: React.FC = () => {
     setLoading(false);
   };
 
-  // Standings
   const handleSaveStanding = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingStanding) return;
@@ -316,7 +306,6 @@ export const AdminPanel: React.FC = () => {
      setLoading(false);
   };
 
-  // Blogs
   const handleSaveBlog = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingBlog) return;
@@ -345,7 +334,6 @@ export const AdminPanel: React.FC = () => {
     setLoading(false);
   };
 
-  // Rules
   const handleSaveRules = async () => {
     setLoading(true);
     const res = await api.saveRules(rules.football, rules.volleyball);
@@ -354,7 +342,6 @@ export const AdminPanel: React.FC = () => {
     setTimeout(() => setActionStatus(''), 3000);
   };
 
-  // Admins
   const handleCreateAdmin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -696,10 +683,9 @@ export const AdminPanel: React.FC = () => {
                                                 <img src={editingPlayer.image} alt="Preview" className="h-10 w-10 object-cover rounded border border-neutral-700" />
                                             </div>
                                         ) : editingPlayer.image ? (
-                                            <div className="flex items-center gap-2 text-xs text-gray-400 truncate max-w-[200px]">
-                                                <ImageIcon size={16} />
-                                                <span>Existing Image</span>
-                                            </div>
+                                            editingPlayer.image.startsWith('Error') ? 
+                                                <div className="text-xs text-red-500 font-bold flex items-center gap-2"><AlertTriangle size={16}/> {editingPlayer.image}</div> 
+                                                : <div className="flex items-center gap-2 text-xs text-gray-400 truncate max-w-[200px]"><ImageIcon size={16} /> <span>Existing Image</span></div>
                                         ) : (
                                             <div className="h-10 w-10 bg-neutral-800 rounded flex items-center justify-center text-neutral-600">
                                                 <User size={20} />
@@ -725,7 +711,6 @@ export const AdminPanel: React.FC = () => {
                                                     if (file) {
                                                         processImage(file, (base64) => {
                                                             setEditingPlayer(prev => ({...prev!, image: base64}));
-                                                            // Clear input so same file can be selected again if needed
                                                             if (fileInputRef.current) fileInputRef.current.value = '';
                                                         });
                                                     }
@@ -759,8 +744,11 @@ export const AdminPanel: React.FC = () => {
                                 {players.map(p => (
                                     <tr key={p.id} className="hover:bg-neutral-800/50">
                                         <td className="px-4 py-3 font-bold text-white flex items-center gap-2">
-                                            {p.image ? <img src={p.image} className="w-6 h-6 rounded-full object-cover" /> : <div className="w-6 h-6 rounded-full bg-neutral-700"/>}
+                                            {p.image && !p.image.startsWith('Error') ? 
+                                                <img src={p.image} className="w-6 h-6 rounded-full object-cover" /> 
+                                                : <div className="w-6 h-6 rounded-full bg-neutral-700 flex items-center justify-center text-xs text-gray-500"><User size={12}/></div>}
                                             {p.name}
+                                            {p.image && p.image.startsWith('Error') && <span className="text-[10px] text-red-500 ml-2 border border-red-500/50 px-1 rounded">Error</span>}
                                         </td>
                                         <td className="px-4 py-3">{teams.find(t => t.id === p.teamId)?.name}</td>
                                         <td className="px-4 py-3">#{p.jerseyNumber}</td>
@@ -776,7 +764,7 @@ export const AdminPanel: React.FC = () => {
                     </div>
                 </div>
             )}
-            {/* ... other tabs ... */}
+            
             {/* STANDINGS */}
             {activeTab === 'STANDINGS' && (
                 <div>

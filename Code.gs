@@ -14,6 +14,18 @@ var SHEETS = {
   RULES: "Rules"
 };
 
+/**
+ * !!! IMPORTANT !!!
+ * RUN THIS FUNCTION ONCE MANUALLY IN THE EDITOR TO AUTHORIZE DRIVE ACCESS.
+ * 1. Select 'authorizeScript' from the function dropdown at the top.
+ * 2. Click 'Run'.
+ * 3. Accept the permissions.
+ */
+function authorizeScript() {
+  DriveApp.getRootFolder();
+  console.log("Script is authorized to access Drive.");
+}
+
 /* --- CORS SUPPORT --- */
 function doOptions(e) {
   return ContentService.createTextOutput("")
@@ -498,7 +510,11 @@ function savePlayerImage(base64Data, playerId) {
     return "https://drive.google.com/uc?export=view&id=" + file.getId();
 
   } catch(e) {
-    return "Error Uploading: " + e.toString();
+    var msg = e.toString();
+    if (msg.includes("permission")) {
+        return "Error: Script needs Authorization. Run authorizeScript() in editor.";
+    }
+    return "Error Uploading: " + msg;
   }
 }
 
