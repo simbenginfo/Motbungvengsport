@@ -14,16 +14,41 @@ export const MatchCard: React.FC<MatchCardProps> = ({ match }) => {
 
   // Robust Date Handling
   let formattedDate = 'TBA';
-  let formattedTime = match.time || '';
+  let formattedTime = '';
+
+  // Helper for 12-hour time format
+  const to12HourTime = (timeStr: string) => {
+      if (!timeStr) return '';
+      // If it already contains AM/PM, assume it's pre-formatted and return properly
+      if (timeStr.toUpperCase().includes('M')) return timeStr;
+
+      try {
+          // Handle potential "HH:MM:SS" by slicing
+          const [h, m] = timeStr.split(':');
+          const hour = parseInt(h, 10);
+          if (isNaN(hour)) return timeStr;
+          
+          const ampm = hour >= 12 ? 'PM' : 'AM';
+          const hour12 = hour % 12 || 12;
+          return `${hour12}:${m} ${ampm}`;
+      } catch (e) {
+          return timeStr;
+      }
+  };
+  
+  if (match.time) {
+      formattedTime = to12HourTime(match.time);
+  }
   
   if (match.date) {
     try {
         const dateObj = new Date(match.date);
         if (!isNaN(dateObj.getTime())) {
-             formattedDate = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-             if (!formattedTime) {
-                 formattedTime = dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-             }
+             // Format: DD-MM-YYYY
+             const day = String(dateObj.getDate()).padStart(2, '0');
+             const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+             const year = dateObj.getFullYear();
+             formattedDate = `${day}-${month}-${year}`;
         }
     } catch (e) {
         // Fallback to TBA
@@ -72,22 +97,23 @@ export const MatchCard: React.FC<MatchCardProps> = ({ match }) => {
         </div>
       </div>
 
-      <div className="border-t border-neutral-800 pt-3 flex justify-between items-center text-sm text-gray-500">
-        <div className="flex items-center gap-4">
-            <div className="flex items-center gap-1.5">
-                <Calendar size={14} />
-                <span>{formattedDate}</span>
+      <div className="border-t border-neutral-800 pt-3 flex flex-col gap-2 text-sm text-gray-400">
+        <div className="flex justify-between items-center">
+            <div className="flex items-center gap-2" title="Match Date">
+                <Calendar size={14} className="text-brand-green"/>
+                <span className="font-mono text-white">{formattedDate}</span>
             </div>
             {formattedTime && (
-                <div className="flex items-center gap-1.5">
-                    <Clock size={14} />
-                    <span>{formattedTime}</span>
+                <div className="flex items-center gap-2 bg-neutral-900 px-2 py-1 rounded border border-neutral-800" title="Kick-off Time">
+                    <Clock size={14} className="text-brand-red" />
+                    <span className="font-bold text-gray-200 text-xs uppercase tracking-wide">Kick-off: {formattedTime}</span>
                 </div>
             )}
         </div>
-        <div className="flex items-center gap-1.5">
-            <MapPin size={14} />
-            <span className="truncate max-w-[100px]">{match.venue || 'TBA'}</span>
+        
+        <div className="flex items-center gap-2 mt-1">
+            <MapPin size={14} className="text-gray-500"/>
+            <span className="truncate max-w-[250px] text-xs">{match.venue || 'Venue TBA'}</span>
         </div>
       </div>
     </div>
