@@ -1,5 +1,7 @@
 var SPREADSHEET_ID = "1RDnDJ5tMaxpcHdIYTlJOs7AbkZEmUlAGYEXeoxvu5dI";
-var PLAYER_IMAGE_FOLDER_ID = "19twoj_GJL13WFiqX6A_SpS7joDno5p1t";
+// Replace this with a Folder ID you have EDIT access to. 
+// If invalid, it defaults to your Google Drive Root Folder.
+var PLAYER_IMAGE_FOLDER_ID = "19twoj_GJL13WFiqX6A_SpS7joDno5p1t"; 
 
 var SHEETS = {
   ADMINS: "Admins",
@@ -31,7 +33,6 @@ function doGet(e) {
 /* --- MAIN POST HANDLER --- */
 function doPost(e) {
   var lock = LockService.getScriptLock();
-  // Wait up to 10s for other requests to finish
   var hasLock = lock.tryLock(10000); 
 
   if (!hasLock) {
@@ -163,20 +164,22 @@ function doPost(e) {
 function adminLogin(email, password) {
   var sheet = getSheet(SHEETS.ADMINS);
   var data = sheet.getDataRange().getValues();
-
   var defaultEmail = "admin@motbung.com";
-  var defaultExists = false;
-
-  for (var i = 1; i < data.length; i++) {
-    if (String(data[i][2]).trim() === defaultEmail) {
-      defaultExists = true;
-      break;
-    }
-  }
-
-  if (!defaultExists) {
-    sheet.appendRow(["A_RECOVERY", "Super Admin", defaultEmail, "admin123", true, new Date()]);
-    data = sheet.getDataRange().getValues();
+  
+  // Create default admin if table is empty (header only)
+  if (data.length <= 1) {
+     sheet.appendRow(["A_RECOVERY", "Super Admin", defaultEmail, "admin123", true, new Date()]);
+     data = sheet.getDataRange().getValues();
+  } else {
+     // Check if default admin was deleted, recreate if needed
+     var hasDefault = false;
+     for(var j=1; j<data.length; j++) {
+        if(String(data[j][2]) === defaultEmail) hasDefault = true;
+     }
+     if(!hasDefault) {
+        sheet.appendRow(["A_RECOVERY", "Super Admin", defaultEmail, "admin123", true, new Date()]);
+        data = sheet.getDataRange().getValues();
+     }
   }
 
   for (var i = 1; i < data.length; i++) {
@@ -377,7 +380,7 @@ function createPlayer(data) {
     data.sport || "",
     data.categoryId || "",
     data.categoryName || "",
-    photoUrl,
+    photoUrl, // If savePlayerImage fails, this contains the error message
     adminEmail,
     new Date()
   ]);
@@ -439,29 +442,48 @@ function savePlayerImage(base64Data, playerId) {
     try { 
       folder = DriveApp.getFolderById(PLAYER_IMAGE_FOLDER_ID); 
     } catch(e) { 
-      // If folder ID invalid, default to root to prevent crash
+      // If folder ID invalid or not found, default to root
+      console.error("Folder not found, defaulting to root: " + e.toString());
       folder = DriveApp.getRootFolder(); 
     }
 
-    // "data:image/jpeg;base64,..."
+    // Parse "data:image/jpeg;base64,....."
     var split = base64Data.split(',');
-    if (split.length < 2) return ""; 
+    if (split.length < 2) return "Error: Invalid Base64 Data"; 
 
     var type = split[0].split(':')[1].split(';')[0];
     var bytes = Utilities.base64Decode(split[1]);
-    var ext = type.split('/')[1];
+    
+    // Determine extension
+    var ext = "jpg";
+    if (type.includes("png")) ext = "png";
+    if (type.includes("jpeg")) ext = "jpg";
 
     var blob = Utilities.newBlob(bytes, type, playerId + "." + ext);
     var file = folder.createFile(blob);
     
-    // Set sharing to ANYONE_WITH_LINK so 'lh3' URL works for everyone
-    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    // Attempt to make public. 
+    // This might fail if organization policies restrict it, but file is still created.
+    try {
+      file.setSharing(DriveApp.Access.ANYONE, DriveApp.Permission.VIEW);
+    } catch(shareError) {
+      console.error("Sharing failed: " + shareError.toString());
+      // Fallback: Try ANYONE_WITH_LINK
+      try {
+        file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      } catch (e2) {
+         // Even if sharing fails, we return the URL. The admin might be able to see it, 
+         // but public users might not.
+      }
+    }
     
-    // Return a direct displayable URL
-    return "https://lh3.googleusercontent.com/d/" + file.getId();
+    // Return a direct displayable URL. 
+    // Using 'drive.google.com/uc?export=view' is often more reliable for raw image usage.
+    return "https://drive.google.com/uc?export=view&id=" + file.getId();
+
   } catch(e) {
-    // Log error internally if possible, return empty string for UI
-    return "";
+    // Return the actual error string so it gets saved to the sheet for debugging
+    return "Error Uploading: " + e.toString();
   }
 }
 
