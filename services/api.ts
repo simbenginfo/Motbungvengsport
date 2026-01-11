@@ -139,10 +139,10 @@ export const api = {
             sport: match.sport,
             categoryId: match.categoryId,
             categoryName: match.categoryName,
-            teamAId: match.teamA.id,
-            teamAName: match.teamA.name,
-            teamBId: match.teamB.id,
-            teamBName: match.teamB.name,
+            teamAId: match.teamA?.id || '',
+            teamAName: match.teamA?.name || '',
+            teamBId: match.teamB?.id || '',
+            teamBName: match.teamB?.name || '',
             matchDate: match.date,
             matchTime: match.time,
             venue: match.venue
@@ -154,8 +154,8 @@ export const api = {
             matchDate: match.date,
             matchTime: match.time,
             venue: match.venue,
-            teamAScore: match.teamA.score,
-            teamBScore: match.teamB.score,
+            teamAScore: match.teamA?.score,
+            teamBScore: match.teamB?.score,
             status: match.status
         });
     }

@@ -211,20 +211,42 @@ export const AdminPanel: React.FC = () => {
     if (!editingMatch) return;
     setLoading(true);
 
-    // Prepare payload. For new matches, we need full Tournament details.
-    // For updates, we usually just need IDs and new scores/status.
-    
-    // If it's a new match, find tournament details from the selected tournament ID
     let matchPayload = {...editingMatch} as Match;
     
+    // VALIDATION: Basic Fields
+    if (!matchPayload.date) {
+        setActionStatus("Error: Match Date is required");
+        setLoading(false);
+        setTimeout(() => setActionStatus(''), 3000);
+        return;
+    }
+    // Time isn't strictly required by backend type but good for UX
+    // if (!matchPayload.time) { ... }
+
+    // Logic for NEW Matches (where we need to construct team names and tournament info)
     if (!matchPayload.id) {
          const tourn = tournaments.find(t => t.id === matchPayload.tournamentId);
          const teamA = teams.find(t => t.id === matchPayload.teamA?.id);
          const teamB = teams.find(t => t.id === matchPayload.teamB?.id);
          
-         if (!tourn || !teamA || !teamB) {
-             setActionStatus("Error: Missing tournament or team selection");
+         if (!tourn) {
+             setActionStatus("Error: Please select a Tournament");
              setLoading(false);
+             setTimeout(() => setActionStatus(''), 3000);
+             return;
+         }
+         
+         if (!teamA || !teamB) {
+             setActionStatus("Error: Please select both Home and Away teams");
+             setLoading(false);
+             setTimeout(() => setActionStatus(''), 3000);
+             return;
+         }
+
+         if (teamA.id === teamB.id) {
+             setActionStatus("Error: Teams cannot play against themselves");
+             setLoading(false);
+             setTimeout(() => setActionStatus(''), 3000);
              return;
          }
 
@@ -246,10 +268,10 @@ export const AdminPanel: React.FC = () => {
         loadAllData();
         setActionStatus('Match saved successfully');
     } else {
-        setActionStatus('Failed to save match: ' + res.message);
+        setActionStatus('Failed to save: ' + res.message);
     }
     setLoading(false);
-    setTimeout(() => setActionStatus(''), 3000);
+    setTimeout(() => setActionStatus(''), 4000);
   };
 
   const handleDeleteMatch = async (id: string) => {
@@ -763,8 +785,10 @@ export const AdminPanel: React.FC = () => {
                     </div>
                 </div>
             )}
-
-            {/* PLAYERS - Same as before */}
+            
+            {/* ... other tabs ... */}
+            
+            {/* PLAYERS */}
             {activeTab === 'PLAYERS' && (
                 <div>
                     <div className="flex justify-between items-center mb-6">
