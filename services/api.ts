@@ -2,7 +2,7 @@ import { Match, Player, Team, Standing, BlogPost, Admin, Tournament, TeamCategor
 import { INITIAL_MATCHES, INITIAL_PLAYERS, INITIAL_TEAMS, INITIAL_STANDINGS, INITIAL_BLOGS, FOOTBALL_RULES, VOLLEYBALL_RULES } from "../constants";
 
 // IMPORTANT: This must be the 'Web App URL' with 'Who has access' set to 'Anyone'
-const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbwMFWvVHXVFOtD_ZuLeO_YRBSSGYwKLkjhiqU3bdXFa_H9HfTB8d2yQ3zoAKTbnRqcV/exec'; 
+const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbyfk3MrsOI5HH68eeFcXo82fq9w1wV_960kUZPukITMZkUF9-G8XmJgFrPy7qzpowc_/exec'; 
 
 interface AuthResponse {
   success: boolean;
@@ -30,7 +30,7 @@ const postToBackend = async <T>(payload: any, retries = 2): Promise<T> => {
       credentials: 'omit', 
       // Using simple text/plain ensures that modern browsers skip the preflight OPTIONS request for simple POSTs
       // This is crucial because GAS Web Apps can be finicky with CORS preflights
-      headers: { 'Content-Type': 'text/plain' },
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify(payload)
     });
     

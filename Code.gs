@@ -13,6 +13,12 @@ var SHEETS = {
   RULES: "Rules"
 };
 
+function doOptions(e) {
+  // Handle CORS preflight requests for environments that enforce it strictly
+  return ContentService.createTextOutput("")
+    .setMimeType(ContentService.MimeType.TEXT);
+}
+
 function doGet(e) {
   return ContentService.createTextOutput(JSON.stringify({ 
     status: "online", 
@@ -22,11 +28,30 @@ function doGet(e) {
 
 function doPost(e) {
   var lock = LockService.getScriptLock();
-  lock.tryLock(10000);
+  // tryLock returns true if lock acquired, false if timeout. 
+  // We MUST handle the failure case to avoid concurrent writes or crashes.
+  var hasLock = lock.tryLock(10000); 
+
+  if (!hasLock) {
+    return ContentService.createTextOutput(JSON.stringify({
+      success: false,
+      message: "Server is busy. Please try again."
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
 
   try {
+    // Robust parsing: Handle if postData is missing or malformed
     var contents = (e && e.postData && e.postData.contents) ? e.postData.contents : "{}";
-    var data = JSON.parse(contents);
+    var data;
+    try {
+      data = JSON.parse(contents);
+    } catch (parseError) {
+      return ContentService.createTextOutput(JSON.stringify({
+        success: false,
+        message: "Invalid JSON payload"
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+
     var action = data.action;
     var result = { success: false, message: "Invalid action" };
 
@@ -118,12 +143,17 @@ function doPost(e) {
       .setMimeType(ContentService.MimeType.JSON);
 
   } catch (err) {
+    // CRITICAL: Catch any script errors and return them as JSON 
+    // This prevents the HTML error page which causes CORS failures
     return ContentService.createTextOutput(JSON.stringify({
       success: false,
       message: "Server Error: " + err.toString()
     })).setMimeType(ContentService.MimeType.JSON);
   } finally {
-    lock.releaseLock();
+    // Only release if we actually acquired it
+    if (hasLock) {
+      lock.releaseLock();
+    }
   }
 }
 
