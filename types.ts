@@ -64,18 +64,23 @@ export interface Match {
 
 export interface Standing {
   teamId: string;
+  teamName: string; 
   played: number;
   won: number;
   drawn: number;
   lost: number;
+  goalsFor: number;
+  goalsAgainst: number;
+  goalDifference: number;
   points: number;
-  category: TeamCategory;
+  category: string; 
+  lastUpdated?: string; // Added timestamp
 }
 
 export interface BlogPost {
   id: string;
   title: string;
-  summary: string;
+  content: string; // Changed from summary to content
   date: string;
   author: string;
   image: string;

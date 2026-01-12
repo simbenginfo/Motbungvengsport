@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Navbar } from './components/Navbar';
-import { ViewState, Team, Match, Player, Standing, BlogPost, TeamCategory, SportType } from './types';
+import { ViewState, Team, Match, Player, Standing, BlogPost, TeamCategory, SportType, Comment } from './types';
 import { api } from './services/api';
 import { MatchCard } from './components/MatchCard';
 import { PlayerCard } from './components/PlayerCard';
 import { AdminPanel } from './components/AdminPanel';
 import { RuleAssistant } from './components/RuleAssistant';
-import { FOOTBALL_RULES, VOLLEYBALL_RULES } from './constants';
-import { ArrowRight, MessageSquare, AlertCircle, WifiOff, ChevronDown, Users } from 'lucide-react';
+import { FOOTBALL_RULES, VOLLEYBALL_RULES, GENERAL_RULES } from './constants';
+import { ArrowRight, MessageSquare, AlertCircle, WifiOff, ChevronDown, Users, RefreshCw, X, Send, Clock, User as UserIcon, Loader2 } from 'lucide-react';
 
 function App() {
   const [view, setView] = useState<ViewState>('HOME');
@@ -16,44 +16,97 @@ function App() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [standings, setStandings] = useState<Standing[]>([]);
   const [blogs, setBlogs] = useState<BlogPost[]>([]);
+  // Store dynamic rules if fetched, otherwise fallback to constants
+  const [dynamicRules, setDynamicRules] = useState<{general: string[], football: string[], volleyball: string[]} | null>(null);
+
   const [loading, setLoading] = useState(true);
   const [backendError, setBackendError] = useState(false);
 
   // Filters
   const [teamFilter, setTeamFilter] = useState<string>('ALL');
-  const [standingsCategory, setStandingsCategory] = useState<TeamCategory>(TeamCategory.FOOTBALL_A);
+  const [standingsCategory, setStandingsCategory] = useState<string>('');
 
+  // Blog Modal State
+  const [selectedPost, setSelectedPost] = useState<BlogPost | null>(null);
+  const [postComments, setPostComments] = useState<Comment[]>([]);
+  const [commentName, setCommentName] = useState('');
+  const [commentText, setCommentText] = useState('');
+  const [commentLoading, setCommentLoading] = useState(false);
+
+  // Defined outside useEffect to be callable
+  const loadData = async (silent = false) => {
+    if (!silent) setLoading(true);
+    try {
+      const [t, m, p, s, b, r] = await Promise.all([
+          api.getTeams(),
+          api.getMatches(),
+          api.getPlayers(),
+          api.getStandings(),
+          api.getBlogPosts(),
+          api.getRules()
+      ]);
+      
+      setTeams(t);
+      setMatches(m);
+      setPlayers(p);
+      setStandings(s);
+      setBlogs(b);
+      setDynamicRules(r);
+      
+      // Smart Category Selection: 
+      // If current selection is empty OR not in the new data, select the first available one.
+      const uniqueCategories = Array.from(new Set(s.map(item => item.category)));
+      
+      // Use functional state update or direct check to ensure we use latest logic
+      setStandingsCategory(prev => {
+          if (uniqueCategories.length > 0) {
+              if (!prev || !uniqueCategories.includes(prev)) {
+                  return uniqueCategories[0];
+              }
+              return prev;
+          }
+          return '';
+      });
+
+    } catch (e) {
+      console.error("Critical Data Load Error", e);
+      setBackendError(true);
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  };
+
+  // Initial Load & View Change Refresh
   useEffect(() => {
-    const loadData = async () => {
-      setLoading(true);
-      try {
-        const [t, m, p, s, b] = await Promise.all([
-            api.getTeams(),
-            api.getMatches(),
-            api.getPlayers(),
-            api.getStandings(),
-            api.getBlogPosts()
-        ]);
-        
-        // Basic check: if everything is empty, we might have a connection issue
-        // But initially DB is empty, so this is just a hint. 
-        // Real connection errors are caught in api.ts and return empty arrays, 
-        // but we can check if they returned the default fallback objects which implies error.
-        
-        setTeams(t);
-        setMatches(m);
-        setPlayers(p);
-        setStandings(s);
-        setBlogs(b);
-      } catch (e) {
-        console.error("Critical Data Load Error", e);
-        setBackendError(true);
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadData();
-  }, []);
+    // We want to fetch fresh data whenever the user navigates to public pages
+    // This ensures that if they came from Admin (after recalculating standings), they see new data.
+    if (view !== 'ADMIN') {
+        loadData();
+    }
+  }, [view]);
+
+  // Load comments when a post is selected
+  useEffect(() => {
+    if (selectedPost) {
+      setPostComments([]);
+      api.getComments(selectedPost.id).then(setPostComments);
+    }
+  }, [selectedPost]);
+
+  const handlePostComment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedPost || !commentName.trim() || !commentText.trim()) return;
+
+    setCommentLoading(true);
+    const res = await api.addComment(selectedPost.id, commentName, commentText);
+    if (res.success) {
+      setCommentText('');
+      // Refresh comments
+      const updatedComments = await api.getComments(selectedPost.id);
+      setPostComments(updatedComments);
+    }
+    setCommentLoading(false);
+  };
 
   const getTeam = (id: string) => teams.find(t => t.id === id);
 
@@ -129,7 +182,7 @@ function App() {
         {blogs.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 {blogs.map(blog => (
-                    <div key={blog.id} className="group cursor-pointer">
+                    <div key={blog.id} onClick={() => setSelectedPost(blog)} className="group cursor-pointer">
                         <div className="h-48 rounded-lg overflow-hidden mb-4 border border-neutral-800 relative">
                              <div className="absolute inset-0 bg-brand-red/10 group-hover:bg-transparent transition-colors z-10" />
                             <img src={blog.image} alt={blog.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
@@ -140,7 +193,8 @@ function App() {
                             <span>{blog.author}</span>
                         </div>
                         <h3 className="text-xl font-bold text-white group-hover:text-brand-green transition-colors mb-2">{blog.title}</h3>
-                        <p className="text-sm text-gray-400 line-clamp-2">{blog.summary}</p>
+                        <p className="text-sm text-gray-400 line-clamp-2">{blog.content}</p>
+                        <span className="text-brand-red text-xs font-bold uppercase mt-2 inline-flex items-center gap-1 group-hover:gap-2 transition-all">Read More <ArrowRight size={12}/></span>
                     </div>
                 ))}
             </div>
@@ -256,13 +310,38 @@ function App() {
     );
   };
 
-  const renderStandings = () => (
+  const renderStandings = () => {
+    // Get unique categories present in the data to build tabs
+    const availableCategories = Array.from(new Set(standings.map(s => s.category)));
+    const activeStandings = standings.filter(s => s.category === standingsCategory);
+    
+    // Get last updated time from the first record (they are usually updated in batch)
+    let lastUpdatedText = "";
+    if (activeStandings.length > 0 && activeStandings[0].lastUpdated) {
+        try {
+            const d = new Date(activeStandings[0].lastUpdated);
+            if (!isNaN(d.getTime())) {
+                lastUpdatedText = "Updated: " + d.toLocaleString();
+            }
+        } catch(e) {}
+    }
+
+    return (
     <div className="space-y-8 animate-fade-in">
-        <h2 className="text-3xl font-display font-bold text-white border-l-4 border-brand-red pl-4">League Table</h2>
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+            <div>
+                <h2 className="text-3xl font-display font-bold text-white border-l-4 border-brand-red pl-4">League Table</h2>
+                {lastUpdatedText && <p className="text-xs text-gray-500 mt-1 pl-5">{lastUpdatedText}</p>}
+            </div>
+            
+            <button onClick={() => loadData(false)} className="text-xs flex items-center gap-1 text-gray-400 hover:text-white transition-colors bg-neutral-900 px-3 py-1 rounded border border-neutral-800">
+                <RefreshCw size={12}/> Refresh
+            </button>
+        </div>
         
-        {/* Tabs */}
+        {/* Tabs - Dynamically generated based on data */}
         <div className="flex flex-wrap gap-2">
-            {Object.values(TeamCategory).map(cat => (
+            {availableCategories.length > 0 ? availableCategories.map(cat => (
                 <button
                     key={cat}
                     onClick={() => setStandingsCategory(cat)}
@@ -274,7 +353,9 @@ function App() {
                 >
                     {cat}
                 </button>
-            ))}
+            )) : (
+                <p className="text-gray-500 text-sm italic">No standings data available yet.</p>
+            )}
         </div>
 
         <div className="overflow-x-auto rounded-lg border border-neutral-800">
@@ -287,30 +368,35 @@ function App() {
                         <th className="px-6 py-4 text-center">W</th>
                         <th className="px-6 py-4 text-center">D</th>
                         <th className="px-6 py-4 text-center">L</th>
+                        <th className="px-6 py-4 text-center">GF</th>
+                        <th className="px-6 py-4 text-center">GA</th>
+                        <th className="px-6 py-4 text-center">GD</th>
                         <th className="px-6 py-4 text-center text-white font-bold">Pts</th>
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-800 bg-brand-gray">
-                    {standings
-                        .filter(s => s.category === standingsCategory)
-                        .sort((a, b) => b.points - a.points)
+                    {activeStandings
+                        .sort((a, b) => b.points - a.points || b.goalDifference - a.goalDifference)
                         .map((standing, index) => (
-                        <tr key={standing.teamId} className="hover:bg-white/5 transition">
+                        <tr key={index} className="hover:bg-white/5 transition">
                             <td className="px-6 py-4 font-bold">{index + 1}</td>
                             <td className="px-6 py-4 font-medium text-white flex items-center gap-3">
-                                {getTeam(standing.teamId)?.name || 'Unknown Team'}
+                                {standing.teamName || getTeam(standing.teamId)?.name || 'Unknown Team'}
                             </td>
                             <td className="px-6 py-4 text-center">{standing.played}</td>
                             <td className="px-6 py-4 text-center text-green-400">{standing.won}</td>
                             <td className="px-6 py-4 text-center">{standing.drawn}</td>
                             <td className="px-6 py-4 text-center text-red-400">{standing.lost}</td>
+                            <td className="px-6 py-4 text-center">{standing.goalsFor}</td>
+                            <td className="px-6 py-4 text-center">{standing.goalsAgainst}</td>
+                            <td className="px-6 py-4 text-center">{standing.goalDifference}</td>
                             <td className="px-6 py-4 text-center font-bold text-white text-base">{standing.points}</td>
                         </tr>
                     ))}
-                    {standings.filter(s => s.category === standingsCategory).length === 0 && (
+                    {activeStandings.length === 0 && (
                          <tr>
-                            <td colSpan={7} className="px-6 py-8 text-center text-gray-600 italic">
-                                No standings available for this category yet.
+                            <td colSpan={10} className="px-6 py-8 text-center text-gray-600 italic">
+                                {availableCategories.length === 0 ? "No standings data available. Check back later." : "Select a category to view standings."}
                             </td>
                          </tr>
                     )}
@@ -318,17 +404,33 @@ function App() {
             </table>
         </div>
     </div>
-  );
+  )};
 
-  const renderRules = () => (
-    <div className="animate-fade-in max-w-4xl mx-auto">
-        <h2 className="text-3xl font-display font-bold text-white mb-8 border-l-4 border-white pl-4">Tournament Rules</h2>
+  const rulesData = dynamicRules || { 
+      general: GENERAL_RULES, 
+      football: FOOTBALL_RULES, 
+      volleyball: VOLLEYBALL_RULES 
+  };
+
+  const renderRulesView = () => (
+    <div className="animate-fade-in max-w-5xl mx-auto">
+        <h2 className="text-3xl font-display font-bold text-white mb-8 border-l-4 border-white pl-4">Tournament Rules & Regulations</h2>
         
+        {/* General Rules Section */}
+        <div className="bg-brand-gray p-6 rounded-lg border border-neutral-800 mb-8">
+            <h3 className="text-xl font-bold text-white mb-4 uppercase tracking-wider border-b border-neutral-700 pb-2">General Rules</h3>
+            <ul className="space-y-3 list-none text-gray-300">
+                {rulesData.general.map((r, i) => (
+                    <li key={i} className="pl-2">{r}</li>
+                ))}
+            </ul>
+        </div>
+
         <div className="grid md:grid-cols-2 gap-8">
             <div className="bg-brand-gray p-6 rounded-lg border border-neutral-800">
                 <h3 className="text-xl font-bold text-brand-red mb-4 uppercase tracking-wider">Football</h3>
-                <ul className="space-y-3 list-disc pl-5 text-gray-300">
-                    {FOOTBALL_RULES.map((r, i) => <li key={i}>{r}</li>)}
+                <ul className="space-y-3 list-none text-gray-300">
+                    {rulesData.football.map((r, i) => <li key={i}>{r}</li>)}
                 </ul>
                 <RuleAssistant sport="Football" />
             </div>
@@ -336,7 +438,7 @@ function App() {
             <div className="bg-brand-gray p-6 rounded-lg border border-neutral-800">
                 <h3 className="text-xl font-bold text-brand-green mb-4 uppercase tracking-wider">Volleyball</h3>
                 <ul className="space-y-3 list-disc pl-5 text-gray-300">
-                    {VOLLEYBALL_RULES.map((r, i) => <li key={i}>{r}</li>)}
+                    {rulesData.volleyball.map((r, i) => <li key={i}>{r}</li>)}
                 </ul>
                 <RuleAssistant sport="Volleyball" />
             </div>
@@ -345,7 +447,7 @@ function App() {
   );
 
   return (
-    <div className="min-h-screen bg-black text-gray-200 font-sans selection:bg-brand-red selection:text-white pb-20">
+    <div className="min-h-screen bg-black text-gray-200 font-sans selection:bg-brand-red selection:text-white pb-20 relative">
       <Navbar currentView={view} setView={setView} />
       
       {backendError && (
@@ -366,11 +468,95 @@ function App() {
                 {view === 'MATCHES' && renderMatches()}
                 {view === 'PLAYERS' && renderPlayers()}
                 {view === 'STANDINGS' && renderStandings()}
-                {view === 'RULES' && renderRules()}
+                {view === 'RULES' && renderRulesView()}
                 {view === 'ADMIN' && <AdminPanel />}
             </>
         )}
       </main>
+
+      {/* Blog Details Modal */}
+      {selectedPost && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in" onClick={() => setSelectedPost(null)}>
+          <div className="bg-neutral-900 w-full max-w-3xl max-h-[90vh] rounded-xl overflow-hidden shadow-2xl border border-neutral-800 flex flex-col" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="relative h-48 md:h-64 shrink-0">
+                <img src={selectedPost.image} className="w-full h-full object-cover" alt={selectedPost.title} />
+                <div className="absolute inset-0 bg-gradient-to-t from-neutral-900 to-transparent"></div>
+                <button onClick={() => setSelectedPost(null)} className="absolute top-4 right-4 bg-black/50 text-white p-2 rounded-full hover:bg-red-600 transition-colors">
+                    <X size={20} />
+                </button>
+                <div className="absolute bottom-4 left-4 right-4">
+                    <h2 className="text-2xl md:text-4xl font-display font-bold text-white mb-2 leading-tight">{selectedPost.title}</h2>
+                    <div className="flex items-center gap-4 text-xs text-gray-300">
+                        <span className="flex items-center gap-1"><UserIcon size={12}/> {selectedPost.author}</span>
+                        <span className="flex items-center gap-1"><Clock size={12}/> {new Date(selectedPost.date).toLocaleDateString()}</span>
+                    </div>
+                </div>
+            </div>
+
+            {/* Scrollable Content */}
+            <div className="flex-1 overflow-y-auto p-6 scrollbar-hide">
+                <div className="prose prose-invert max-w-none text-gray-300 text-sm md:text-base leading-relaxed whitespace-pre-wrap">
+                    {selectedPost.content}
+                </div>
+
+                {/* Comments Section */}
+                <div className="mt-10 border-t border-neutral-800 pt-8">
+                    <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+                        <MessageSquare className="text-brand-green" size={20} />
+                        Comments ({postComments.length})
+                    </h3>
+
+                    {/* Comment List */}
+                    <div className="space-y-4 mb-8">
+                        {postComments.length > 0 ? postComments.map((comment) => (
+                            <div key={comment.id} className="bg-black/30 p-4 rounded-lg border border-neutral-800 flex gap-3">
+                                <div className="w-8 h-8 rounded-full bg-neutral-700 flex items-center justify-center shrink-0 font-bold text-brand-green">
+                                    {comment.user.charAt(0).toUpperCase()}
+                                </div>
+                                <div>
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <span className="font-bold text-sm text-white">{comment.user}</span>
+                                        <span className="text-[10px] text-gray-500">{new Date(comment.timestamp).toLocaleDateString()}</span>
+                                    </div>
+                                    <p className="text-sm text-gray-400">{comment.text}</p>
+                                </div>
+                            </div>
+                        )) : (
+                            <p className="text-gray-500 text-sm italic">No comments yet. Be the first to share your thoughts!</p>
+                        )}
+                    </div>
+
+                    {/* Comment Form */}
+                    <form onSubmit={handlePostComment} className="bg-neutral-800/30 p-4 rounded-lg border border-neutral-800">
+                        <h4 className="text-sm font-bold text-gray-300 mb-3">Leave a comment</h4>
+                        <input 
+                            type="text" 
+                            placeholder="Your Name" 
+                            value={commentName}
+                            onChange={(e) => setCommentName(e.target.value)}
+                            className="w-full bg-black border border-neutral-700 rounded px-3 py-2 text-sm text-white focus:border-brand-green outline-none mb-3"
+                            required
+                        />
+                        <textarea 
+                            placeholder="Write your comment..." 
+                            value={commentText}
+                            onChange={(e) => setCommentText(e.target.value)}
+                            className="w-full bg-black border border-neutral-700 rounded px-3 py-2 text-sm text-white focus:border-brand-green outline-none h-20 mb-3 resize-none"
+                            required
+                        />
+                        <div className="flex justify-end">
+                            <button type="submit" disabled={commentLoading} className="bg-brand-red text-white px-4 py-2 rounded text-sm font-bold hover:bg-red-700 transition flex items-center gap-2 disabled:opacity-50">
+                                {commentLoading ? <Loader2 className="animate-spin" size={16}/> : <Send size={16} />}
+                                Post Comment
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Footer / Comment Section Teaser */}
       <footer className="mt-20 border-t border-neutral-900 bg-brand-gray py-12">
@@ -385,26 +571,21 @@ function App() {
             </div>
             
             <div>
-                <h4 className="font-bold text-white mb-4">Community</h4>
-                <div className="bg-neutral-900 p-4 rounded border border-neutral-800">
-                     <div className="flex items-start gap-3 mb-3">
-                        <MessageSquare size={18} className="text-brand-red mt-1" />
-                        <div>
-                            <p className="text-xs text-gray-400 font-bold">Admin</p>
-                            <p className="text-sm">Welcome to the official Motbung Veng Tournament app!</p>
-                        </div>
-                     </div>
-                     <input type="text" placeholder="Write a comment..." className="w-full bg-black border border-neutral-700 rounded px-2 py-1 text-xs focus:border-brand-red outline-none" />
-                </div>
-            </div>
-
-            <div>
-                 <h4 className="font-bold text-white mb-4">Quick Links</h4>
+                <h4 className="font-bold text-white mb-4">Quick Links</h4>
                  <ul className="space-y-2 text-sm text-gray-400">
                     <li className="hover:text-brand-green cursor-pointer">Privacy Policy</li>
                     <li className="hover:text-brand-green cursor-pointer">Contact Organizers</li>
                     <li className="hover:text-brand-green cursor-pointer">Sponsorship</li>
                  </ul>
+            </div>
+
+            <div>
+                 <h4 className="font-bold text-white mb-4">Community</h4>
+                 <p className="text-xs text-gray-500 mb-2">Join the conversation on our news posts!</p>
+                 <div className="flex gap-2">
+                    <div className="w-8 h-8 rounded-full bg-neutral-800 flex items-center justify-center text-brand-red"><MessageSquare size={16}/></div>
+                    <div className="text-sm text-gray-400">Read latest updates and share your thoughts with the community.</div>
+                 </div>
             </div>
         </div>
       </footer>

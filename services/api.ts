@@ -1,5 +1,5 @@
-import { Match, Player, Team, Standing, BlogPost, Admin, Tournament, TeamCategory } from "../types";
-import { INITIAL_MATCHES, INITIAL_PLAYERS, INITIAL_TEAMS, INITIAL_STANDINGS, INITIAL_BLOGS, FOOTBALL_RULES, VOLLEYBALL_RULES } from "../constants";
+import { Match, Player, Team, Standing, BlogPost, Admin, Tournament, TeamCategory, Comment } from "../types";
+import { INITIAL_MATCHES, INITIAL_PLAYERS, INITIAL_TEAMS, INITIAL_STANDINGS, INITIAL_BLOGS, FOOTBALL_RULES, VOLLEYBALL_RULES, GENERAL_RULES } from "../constants";
 
 // IMPORTANT: This must be the 'Web App URL' with 'Who has access' set to 'Anyone'
 const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbxgyZKWs4kyIuY_KBCdPGIVviJ2dN4lrzLLwLIydU2Rf73b_nGyL9xDnjzrype5sr-0/exec'; 
@@ -219,33 +219,102 @@ export const api = {
   getStandings: async (): Promise<Standing[]> => {
     const result = await postToBackend<{success: boolean, standings: any[]}>({ action: 'getStandings' });
     if (result.success && Array.isArray(result.standings)) {
-        return result.standings;
+        return result.standings.map(s => ({
+            teamId: s.teamId,
+            teamName: s.teamName,
+            played: s.played,
+            won: s.wins, // Map backend 'wins' to frontend 'won'
+            drawn: s.draws,
+            lost: s.losses,
+            goalsFor: s.goalsFor,
+            goalsAgainst: s.goalsAgainst,
+            goalDifference: s.goalDifference,
+            points: s.points,
+            category: s.categoryName, // Using categoryName from backend as category identifier
+            lastUpdated: s.lastUpdated
+        }));
     }
     return INITIAL_STANDINGS;
   },
-  upsertStanding: (standing: Standing) => postToBackend<GenericResponse>({ action: 'upsertStanding', data: standing }),
-  deleteStanding: (teamId: string, category: string) => postToBackend<GenericResponse>({ action: 'deleteStanding', teamId, category }),
+  
+  // New function to manually trigger calc
+  recalculateStandings: () => postToBackend<GenericResponse>({ action: 'recalculateStandings' }),
+  
+  // Deprecated manual upsert (backend now auto-calculates)
+  upsertStanding: (standing: Standing) => postToBackend<GenericResponse>({ action: 'recalculateStandings' }),
+  
+  deleteStanding: (teamId: string, category: string) => postToBackend<GenericResponse>({ action: 'recalculateStandings' }),
 
   // Blogs
   getBlogPosts: async (): Promise<BlogPost[]> => {
-    const result = await postToBackend<{success: boolean, blogs: any[]}>({ action: 'getBlogPosts' });
+    // Calling the new backend action 'getBlogs'
+    const result = await postToBackend<{success: boolean, blogs: any[]}>({ action: 'getBlogs' });
     if (result.success && Array.isArray(result.blogs)) {
-        return result.blogs;
+        // Map backend response (postId, content, etc.) to frontend interface
+        return result.blogs.map(b => ({
+            id: b.postId,
+            title: b.title,
+            content: b.content,
+            image: b.coverImageUrl,
+            author: b.createdBy,
+            date: b.createdAt
+        }));
     }
     return INITIAL_BLOGS;
   },
-  upsertBlogPost: (blog: BlogPost) => postToBackend<GenericResponse>({ action: 'upsertBlogPost', data: blog }),
-  deleteBlogPost: (id: string) => postToBackend<GenericResponse>({ action: 'deleteBlogPost', id }),
+  upsertBlogPost: (blog: BlogPost) => {
+    // Determine if Create or Update based on ID presence and format
+    // Frontend IDs for new items typically start with 'B' via Date.now() in component, backend IDs are 'blog_'
+    if (!blog.id || blog.id.startsWith('B') || !blog.id.startsWith('blog_')) {
+        return postToBackend<GenericResponse>({ 
+            action: 'createBlog', 
+            title: blog.title,
+            content: blog.content,
+            coverImageUrl: blog.image
+        });
+    } else {
+        return postToBackend<GenericResponse>({ 
+            action: 'updateBlog', 
+            postId: blog.id,
+            title: blog.title,
+            content: blog.content,
+            coverImageUrl: blog.image
+        });
+    }
+  },
+  deleteBlogPost: (id: string) => postToBackend<GenericResponse>({ action: 'deleteBlog', postId: id }),
+
+  // Comments
+  addComment: (blogId: string, name: string, comment: string) => postToBackend<GenericResponse>({ action: 'addComment', blogId, name, comment }),
+  
+  getComments: async (blogId: string): Promise<Comment[]> => {
+    const result = await postToBackend<{success: boolean, comments: any[]}>({ action: 'getComments', blogId });
+    if (result.success && Array.isArray(result.comments)) {
+      return result.comments.map(c => ({
+        id: c.commentId,
+        user: c.name,
+        text: c.comment,
+        timestamp: c.createdAt
+      }));
+    }
+    return [];
+  },
 
   // Rules
-  getRules: async (): Promise<{football: string[], volleyball: string[]}> => {
-    const result = await postToBackend<{success: boolean, football: string[], volleyball: string[]}>({ action: 'getRules' });
+  getRules: async (): Promise<{general: string[], football: string[], volleyball: string[]}> => {
+    const result = await postToBackend<{success: boolean, general: string[], football: string[], volleyball: string[]}>({ action: 'getRules' });
     if (result.success) {
-        return { football: result.football, volleyball: result.volleyball };
+        // Use backend data if it exists and has items, otherwise fallback to constants
+        // This prevents an empty backend (initially) from hiding the default rules
+        return { 
+            general: (result.general && result.general.length > 0) ? result.general : GENERAL_RULES,
+            football: (result.football && result.football.length > 0) ? result.football : FOOTBALL_RULES, 
+            volleyball: (result.volleyball && result.volleyball.length > 0) ? result.volleyball : VOLLEYBALL_RULES 
+        };
     }
-    return { football: FOOTBALL_RULES, volleyball: VOLLEYBALL_RULES };
+    return { general: GENERAL_RULES, football: FOOTBALL_RULES, volleyball: VOLLEYBALL_RULES };
   },
-  saveRules: (football: string[], volleyball: string[]) => postToBackend<GenericResponse>({ action: 'saveRules', football, volleyball }),
+  saveRules: (general: string[], football: string[], volleyball: string[]) => postToBackend<GenericResponse>({ action: 'saveRules', general, football, volleyball }),
   
   // Admin Authentication
   authenticateAdmin: async (email: string, password: string): Promise<AuthResponse> => {
